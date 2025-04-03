@@ -5,11 +5,12 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 // Assuming we'll add this screen to a stack navigator nested within the Drawer or similar
 // We need to define the param list for that stack
 // Example: type EstimatesStackParamList = { EstimatesList: undefined; EstimateBuilder: { estimateId: string }; };
-// For now, let's define it locally, might need adjustment later
-type EstimateBuilderParams = { estimateId: string };
-// Placeholder for the actual stack param list it belongs to
-type PlaceholderStackParamList = { EstimateBuilder: EstimateBuilderParams }; // Replace with actual stack name later
-type Props = NativeStackScreenProps<PlaceholderStackParamList, 'EstimateBuilder'>;
+// Import the actual stack param list from App.tsx
+import { EstimateStackParamList } from '../../../App'; // Adjust path if App.tsx is moved
+
+// Define the Props type using the imported param list
+type Props = NativeStackScreenProps<EstimateStackParamList, 'EstimateBuilder'>;
+
 
 import { supabase } from '../../lib/supabaseClient';
 // Import the modal AND the exported type
@@ -17,10 +18,10 @@ import QuoteItemModal, { QuoteItem } from '../../components/QuoteItem/QuoteItemM
 import { TouchableOpacity } from 'react-native'; // Ensure TouchableOpacity is imported
 
 // Define types for data (can be refined)
-type QuoteDetails = { 
-  estimate_id: string; 
-  estimate_number: string; 
-  customer_id: string | null; 
+type QuoteDetails = {
+  estimate_id: string;
+  // estimate_number: string; // Removed - Does not exist in DB query result
+  customer_id: string | null;
   subtotal: number | null;
   overhead: number | null; // Added
   profit: number | null; // Added
@@ -42,7 +43,8 @@ interface GroupedItem extends QuoteGroup {
 
 
 const EstimateBuilderScreen: React.FC<Props> = ({ route }) => {
-  const { estimateId } = route.params; // Get estimateId from navigation params
+  // Get estimateId from navigation params - it might be undefined based on the type
+  const estimateId = route.params?.estimateId; 
 
   const [quote, setQuote] = useState<QuoteDetails | null>(null);
   const [customer, setCustomer] = useState<CustomerDetails | null>(null);
@@ -55,14 +57,20 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route }) => {
   const [targetGroupId, setTargetGroupId] = useState<string | null>(null); // Track which group to add item to
 
   const fetchData = useCallback(async () => {
+    // Only proceed if estimateId exists
+    if (!estimateId) {
+      setLoading(false); // Nothing to fetch for a new estimate
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      // Fetch quote details - explicitly select needed fields
-      const quoteColumns = 'estimate_id, estimate_number, customer_id, subtotal, overhead, profit, contingency, discount, tax_amount, total, status'; // Add status etc. if needed
+      // Fetch quote details - explicitly select needed fields - REMOVED estimate_number
+      const quoteColumns = 'estimate_id, customer_id, subtotal, overhead, profit, contingency, discount, tax_amount, total, status'; // Add status etc. if needed
       const { data: quoteData, error: quoteError } = await supabase
         .from('quotes')
-        .select(quoteColumns) 
+        .select(quoteColumns)
         .eq('estimate_id', estimateId)
         .single();
       if (quoteError) throw quoteError;
@@ -105,11 +113,19 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route }) => {
     } finally {
       setLoading(false);
     }
-  }, [estimateId]);
+  }, [estimateId]); // Keep estimateId dependency
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (estimateId) {
+      // Only fetch data if we are editing an existing estimate
+      fetchData();
+    } else {
+      // If creating a new estimate, just stop loading
+      setLoading(false);
+    }
+    // Depend on estimateId to re-run if it changes (though unlikely in this setup)
+    // Depend on fetchData callback to ensure it's stable
+  }, [estimateId, fetchData]);
 
   // Modified to accept optional groupId
   const handleAddItem = (groupId: string | null = null) => { 
@@ -284,12 +300,19 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route }) => {
       setError(e.message);
       Alert.alert(`Error reordering ${type}`, e.message);
       setLoading(false); // Stop loading on error
-    } 
+    }
     // No finally block here, setLoading(false) is handled by fetchData or error path
   };
   // --- End Reordering Logic ---
 
+  // Removed the explicit check for !estimateId, useEffect handles the loading state now
+
   const handleAddGroup = () => {
+    // Ensure we have an estimateId before adding group (should exist if editing, need to handle creation flow)
+    if (!estimateId) {
+        Alert.alert("Cannot Add Group", "Please save the new estimate first."); // Or handle creation differently
+        return;
+    }
     Alert.prompt(
       'Add New Group',
       'Enter the name for the new group:',
@@ -379,10 +402,11 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route }) => {
     <ScrollView style={styles.container}>
       {/* Header Section */}
       <View style={styles.header}>
-        <Text style={styles.quoteNumber}>Quote #: {quote.estimate_number}</Text>
+        {/* Conditionally display quote number or 'New Quote' */}
+        <Text style={styles.quoteNumber}>{quote ? `Quote #: ${quote.estimate_id}` : 'New Estimate'}</Text> 
         <Text>Customer: {customer ? `${customer.first_name} ${customer.last_name}` : 'N/A'}</Text>
         {/* TODO: Add button to select/edit customer */}
-        <Text style={styles.totalText}>Total: ${quote.total?.toFixed(2) ?? '0.00'}</Text>
+        <Text style={styles.totalText}>Total: ${quote?.total?.toFixed(2) ?? '0.00'}</Text>
       </View>
 
       {/* Items/Groups Section - Render Hierarchically */}
@@ -475,7 +499,7 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route }) => {
       <QuoteItemModal
         isVisible={isItemModalVisible}
         onClose={handleItemModalClose}
-        quoteId={estimateId}
+        quoteId={estimateId!} // Use non-null assertion - logic ensures it's defined here
         itemToEdit={itemToEdit}
         onSave={handleItemModalSave}
         // Pass the target group ID to the modal
