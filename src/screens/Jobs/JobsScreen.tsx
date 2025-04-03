@@ -9,7 +9,7 @@ type Job = {
   // job_number: string; // Removed - Assuming column does not exist based on user feedback
   customer_id: string | null; // uuid, assuming it can be null
   status: string | null;
-  date_created: string | null; // timestamptz
+  // date_created: string | null; // timestamptz - Removed, column does not exist
   // Add other relevant fields from your 'jobs' table
 };
 
@@ -30,8 +30,8 @@ const JobsScreen = () => {
       // Add RLS filtering later if needed
       const { data, error: fetchError } = await supabase
         .from('jobs')
-        .select('job_id, customer_id, status, date_created') // Select specific columns - removed job_number
-        .order('date_created', { ascending: false }); // Example order
+        .select('job_id, customer_id, status') // Select specific columns - removed job_number and date_created
+        // .order('date_created', { ascending: false }); // Example order - Removed, column does not exist
 
       if (fetchError) {
         throw fetchError;
