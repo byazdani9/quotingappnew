@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabaseClient'; // Adjust path if needed
 // Adjust based on the actual columns you need from the 'quotes' table
 type Quote = {
   estimate_id: string; // uuid
-  estimate_number: string;
+  // estimate_number: string; // Removed - Column does not exist
   customer_id: string | null; // uuid, assuming it can be null
   status: string | null;
   total: number | null;
@@ -30,7 +30,7 @@ const EstimatesScreen = () => {
       // Add .eq('user_id', supabase.auth.getUser().id) etc. based on RLS later
       const { data, error: fetchError } = await supabase
         .from('quotes')
-        .select('estimate_id, estimate_number, customer_id, status, total') // Select specific columns
+        .select('estimate_id, customer_id, status, total') // Select specific columns - removed estimate_number
         .order('created_at', { ascending: false }); // Example order
 
       if (fetchError) {
@@ -48,9 +48,10 @@ const EstimatesScreen = () => {
     }
   };
 
-  const renderItem = ({ item }: { item: Quote }) => (
+const renderItem = ({ item }: { item: Quote }) => (
     <View style={styles.itemContainer}>
-      <Text style={styles.itemText}>Number: {item.estimate_number}</Text>
+      {/* <Text style={styles.itemText}>Number: {item.estimate_number}</Text> // Removed - Column does not exist */}
+      <Text style={styles.itemText}>ID: {item.estimate_id}</Text> {/* Displaying ID for now */}
       <Text style={styles.itemText}>Status: {item.status ?? 'N/A'}</Text>
       <Text style={styles.itemText}>Total: {item.total?.toFixed(2) ?? 'N/A'}</Text>
       {/* Add more details or navigation onPress later */}

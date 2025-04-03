@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabaseClient'; // Adjust path if needed
 // Adjust based on the actual columns you need from the 'jobs' table
 type Job = {
   job_id: string; // uuid
-  job_number: string;
+  // job_number: string; // Removed - Assuming column does not exist based on user feedback
   customer_id: string | null; // uuid, assuming it can be null
   status: string | null;
   date_created: string | null; // timestamptz
@@ -30,7 +30,7 @@ const JobsScreen = () => {
       // Add RLS filtering later if needed
       const { data, error: fetchError } = await supabase
         .from('jobs')
-        .select('job_id, job_number, customer_id, status, date_created') // Select specific columns
+        .select('job_id, customer_id, status, date_created') // Select specific columns - removed job_number
         .order('date_created', { ascending: false }); // Example order
 
       if (fetchError) {
@@ -48,9 +48,10 @@ const JobsScreen = () => {
     }
   };
 
-  const renderItem = ({ item }: { item: Job }) => (
+const renderItem = ({ item }: { item: Job }) => (
     <View style={styles.itemContainer}>
-      <Text style={styles.itemText}>Number: {item.job_number}</Text>
+      {/* <Text style={styles.itemText}>Number: {item.job_number}</Text> // Removed - Assuming column does not exist */}
+      <Text style={styles.itemText}>ID: {item.job_id}</Text> {/* Displaying ID for now */}
       <Text style={styles.itemText}>Status: {item.status ?? 'N/A'}</Text>
       {/* Ideally fetch and display customer name based on customer_id */}
       <Text style={styles.itemText}>Customer ID: {item.customer_id ?? 'N/A'}</Text>
