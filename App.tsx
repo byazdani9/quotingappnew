@@ -12,6 +12,7 @@ import SignUpScreen from './src/screens/Auth/SignUpScreen';
 // Import Main App Screens
 import DashboardScreen from './src/screens/Dashboard/DashboardScreen';
 import EstimatesScreen from './src/screens/Estimates/EstimatesScreen';
+import EstimateBuilderScreen from './src/screens/Estimates/EstimateBuilderScreen'; // Import Builder
 import JobsScreen from './src/screens/Jobs/JobsScreen';
 import CostbooksScreen from './src/screens/Costbooks/CostbooksScreen';
 import SettingsScreen from './src/screens/Settings/SettingsScreen';
@@ -24,10 +25,16 @@ export type AuthStackParamList = {
   SignUp: undefined;
 };
 
+// Define types for the nested Estimate Stack
+export type EstimateStackParamList = {
+  EstimateList: undefined; // Route for EstimatesScreen
+  EstimateBuilder: { estimateId?: string }; // Route for EstimateBuilderScreen, optional ID for editing
+};
+
 // Define types for the Drawer navigator parameters
 export type AppDrawerParamList = {
   Dashboard: undefined;
-  Estimates: undefined;
+  Estimates: undefined; // This will now point to the EstimateStack
   Jobs: undefined;
   Costbooks: undefined;
   Customers: undefined; // Add Customers to drawer params
@@ -36,14 +43,30 @@ export type AppDrawerParamList = {
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
+const EstimateStackNav = createNativeStackNavigator<EstimateStackParamList>(); // Estimate Stack Navigator
 const Drawer = createDrawerNavigator<AppDrawerParamList>(); // Create Drawer Navigator instance
+
+// Stack Navigator for Estimate related screens
+function EstimateStackNavigator() {
+  return (
+    <EstimateStackNav.Navigator screenOptions={{ headerShown: false }}>
+      {/* Set headerShown to true if you want a header for the stack */}
+      <EstimateStackNav.Screen name="EstimateList" component={EstimatesScreen} />
+      <EstimateStackNav.Screen name="EstimateBuilder" component={EstimateBuilderScreen} />
+    </EstimateStackNav.Navigator>
+  );
+}
+
 
 // Main App component using Drawer Navigator
 function MainAppDrawer() {
   return (
     <Drawer.Navigator initialRouteName="Dashboard">
       <Drawer.Screen name="Dashboard" component={DashboardScreen} />
-      <Drawer.Screen name="Estimates" component={EstimatesScreen} />
+      {/* Use render prop syntax for nesting */}
+      <Drawer.Screen name="Estimates">
+        {() => <EstimateStackNavigator />}
+      </Drawer.Screen>
       <Drawer.Screen name="Jobs" component={JobsScreen} />
       <Drawer.Screen name="Customers" component={CustomersScreen} />
       <Drawer.Screen name="Costbooks" component={CostbooksScreen} />
