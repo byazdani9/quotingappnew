@@ -16,6 +16,7 @@
   - [ ] Implement Costbook import/export functionality.
   - [ ] Implement Project Dashboard.
   - [ ] Implement User settings/preferences.
+  - [ ] Integrate Google Calendar on Dashboard to create Estimates.
 - **Technical Debt & Refinement:**
   - [ ] Address remaining dependency warnings (e.g., linting tools, React 19 peer dependency).
   - [ ] Write frontend unit/integration tests (Jest).
