@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity } from 'react-native'; // Added TouchableOpacity
+import { useNavigation } from '@react-navigation/native'; // Added useNavigation
+import { NativeStackNavigationProp } from '@react-navigation/native-stack'; // Added for type safety
 import { supabase } from '../../lib/supabaseClient'; // Adjust path if needed
+import { EstimateStackParamList } from '../../../App'; // Import the stack param list
 
 // Define a type for the quote data we expect
 // Adjust based on the actual columns you need from the 'quotes' table
@@ -13,7 +16,14 @@ type Quote = {
   // Add other relevant fields from your 'quotes' table
 };
 
+// Define the navigation prop type for this screen within the EstimateStack
+type EstimatesScreenNavigationProp = NativeStackNavigationProp<
+  EstimateStackParamList,
+  'EstimateList' // This screen's route name in the stack
+>;
+
 const EstimatesScreen = () => {
+  const navigation = useNavigation<EstimatesScreenNavigationProp>(); // Hook for navigation
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +58,14 @@ const EstimatesScreen = () => {
     }
   };
 
-const renderItem = ({ item }: { item: Quote }) => (
+  const handleAddNewEstimate = () => {
+    // Navigate to the builder screen for a NEW estimate (no ID passed)
+    navigation.navigate('EstimateBuilder', {}); 
+  };
+
+  const renderItem = ({ item }: { item: Quote }) => (
+    // TODO: Make items pressable to navigate to EstimateBuilder for editing
+    // onPress={() => navigation.navigate('EstimateBuilder', { estimateId: item.estimate_id })}
     <View style={styles.itemContainer}>
       {/* <Text style={styles.itemText}>Number: {item.estimate_number}</Text> // Removed - Column does not exist */}
       <Text style={styles.itemText}>ID: {item.estimate_id}</Text> {/* Displaying ID for now */}
@@ -83,9 +100,14 @@ const renderItem = ({ item }: { item: Quote }) => (
         renderItem={renderItem}
         keyExtractor={(item) => item.estimate_id}
         ListEmptyComponent={<Text style={styles.emptyText}>No estimates found.</Text>}
+        // Add some padding at the bottom to avoid overlap with button
+        contentContainerStyle={{ paddingBottom: 60 }} 
       />
-      {/* TODO: Add '+' button for new estimate */}
-    </View> 
+      {/* Add New Estimate Button */}
+      <TouchableOpacity style={styles.addButton} onPress={handleAddNewEstimate}>
+        <Text style={styles.addButtonText}>+ Add New Estimate</Text>
+      </TouchableOpacity>
+    </View>
   );
 };
 
@@ -119,10 +141,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: 'gray',
   },
-  errorText: { 
+  errorText: {
     color: 'red',
     fontSize: 16,
-  }, 
+  },
+  addButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    backgroundColor: '#007AFF', // Example blue color
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 30,
+    elevation: 5, // Android shadow
+    shadowColor: '#000', // iOS shadow
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });
 
 export default EstimatesScreen;
