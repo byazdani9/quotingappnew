@@ -1,5 +1,6 @@
 package com.quotingappnew
 
+import android.os.Bundle; // Required for Reanimated setup
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
@@ -19,4 +20,9 @@ class MainActivity : ReactActivity() {
    */
   override fun createReactActivityDelegate(): ReactActivityDelegate =
       DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
+
+  // Add this method for react-native-reanimated
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState) // Pass the savedInstanceState
+  }
 }

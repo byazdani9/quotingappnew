@@ -1,131 +1,121 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React, { useState, useEffect } from 'react';
+import { SafeAreaView, StatusBar, Text, View } from 'react-native'; // Removed Button import
+import { GestureHandlerRootView } from 'react-native-gesture-handler'; // Import GestureHandlerRootView
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createDrawerNavigator } from '@react-navigation/drawer'; // Import Drawer Navigator
+import { Session } from '@supabase/supabase-js';
 
-import React from 'react';
-import type {PropsWithChildren} from 'react';
-import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+import { supabase } from './src/lib/supabaseClient';
+import LoginScreen from './src/screens/Auth/LoginScreen';
+import SignUpScreen from './src/screens/Auth/SignUpScreen';
+// Import Main App Screens
+import DashboardScreen from './src/screens/Dashboard/DashboardScreen';
+import EstimatesScreen from './src/screens/Estimates/EstimatesScreen';
+import JobsScreen from './src/screens/Jobs/JobsScreen';
+import CostbooksScreen from './src/screens/Costbooks/CostbooksScreen';
+import SettingsScreen from './src/screens/Settings/SettingsScreen';
+import CustomersScreen from './src/screens/Customers/CustomersScreen'; // Import CustomersScreen
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
+// Define types for the navigation stack parameters
+export type AuthStackParamList = {
+  Login: undefined; // No params expected for Login route
+  SignUp: undefined;
+};
 
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+// Define types for the Drawer navigator parameters
+export type AppDrawerParamList = {
+  Dashboard: undefined;
+  Estimates: undefined;
+  Jobs: undefined;
+  Costbooks: undefined;
+  Customers: undefined; // Add Customers to drawer params
+  Settings: undefined;
+  // Add other main app screens here
+};
+
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
+const Drawer = createDrawerNavigator<AppDrawerParamList>(); // Create Drawer Navigator instance
+
+// Main App component using Drawer Navigator
+function MainAppDrawer() {
   return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
+    <Drawer.Navigator initialRouteName="Dashboard">
+      <Drawer.Screen name="Dashboard" component={DashboardScreen} />
+      <Drawer.Screen name="Estimates" component={EstimatesScreen} />
+      <Drawer.Screen name="Jobs" component={JobsScreen} />
+      <Drawer.Screen name="Customers" component={CustomersScreen} />
+      <Drawer.Screen name="Costbooks" component={CostbooksScreen} />
+      <Drawer.Screen name="Settings" component={SettingsScreen} />
+      {/* Add other screens to the drawer */}
+    </Drawer.Navigator>
   );
 }
+
 
 function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
-  };
+  useEffect(() => {
+    // Check initial session state
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
 
-  /*
-   * To keep the template simple and small we're adding padding to prevent view
-   * from rendering under the System UI.
-   * For bigger apps the reccomendation is to use `react-native-safe-area-context`:
-   * https://github.com/AppAndFlow/react-native-safe-area-context
-   *
-   * You can read more about it here:
-   * https://github.com/react-native-community/discussions-and-proposals/discussions/827
-   */
-  const safePadding = '5%';
+    // Listen for auth state changes (login, logout)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      // No need to setLoading(false) here as initial load is handled above
+    });
+
+    // Cleanup subscription on unmount
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (loading) {
+    // Optional: Render a loading indicator while checking session
+    return (
+      <SafeAreaView>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Text>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <View style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        style={backgroundStyle}>
-        <View style={{paddingRight: safePadding}}>
-          <Header/>
-        </View>
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-            paddingHorizontal: safePadding,
-            paddingBottom: safePadding,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </View>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <NavigationContainer>
+        <StatusBar barStyle={'dark-content'} />
+        {session && session.user ? (
+        // User is logged in - Show main app Drawer Navigator
+        <MainAppDrawer />
+      ) : (
+        // User is not logged in - Show authentication stack
+        <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+          <AuthStack.Screen
+            name="Login"
+            component={LoginScreen}
+            // options={{ headerShown: false }} // Moved to screenOptions
+          />
+          <AuthStack.Screen
+            name="SignUp"
+            component={SignUpScreen}
+            // options={{ headerShown: false }} // Moved to screenOptions
+          />
+        </AuthStack.Navigator>
+        )}
+      </NavigationContainer>
+    </GestureHandlerRootView>
   );
 }
 
-const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
-  },
-});
+// Removed redundant Button import
+
 
 export default App;
