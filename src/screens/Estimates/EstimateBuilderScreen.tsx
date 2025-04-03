@@ -387,16 +387,18 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route }) => {
 
 
   if (loading) {
-    return <View style={styles.centered}><ActivityIndicator size="large" /></View>;
+     return <View style={styles.centered}><ActivityIndicator size="large" /></View>;
   }
 
   if (error) {
     return <View style={styles.centered}><Text style={styles.errorText}>Error: {error}</Text></View>;
   }
 
-  if (!quote) {
+  // Only show "Quote not found" if we were trying to load one (estimateId exists) but failed
+  if (estimateId && !quote) {
      return <View style={styles.centered}><Text>Quote not found.</Text></View>;
   }
+  // If estimateId is null/undefined (creating new), we proceed even if quote is null
 
   return (
     <ScrollView style={styles.container}>
@@ -482,16 +484,19 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route }) => {
       <View style={styles.totalsContainer}>
          <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Subtotal:</Text>
-            <Text style={styles.totalValue}>${quote.subtotal?.toFixed(2) ?? '0.00'}</Text>
+            {/* Use optional chaining for quote */}
+            <Text style={styles.totalValue}>${quote?.subtotal?.toFixed(2) ?? '0.00'}</Text>
          </View>
          {/* TODO: Add rows for Overhead, Profit, Contingency, Discount if needed */}
          <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Tax (HST):</Text> 
-            <Text style={styles.totalValue}>${quote.tax_amount?.toFixed(2) ?? '0.00'}</Text>
+            {/* Use optional chaining for quote */}
+            <Text style={styles.totalValue}>${quote?.tax_amount?.toFixed(2) ?? '0.00'}</Text>
          </View>
          <View style={[styles.totalRow, styles.grandTotalRow]}>
             <Text style={[styles.totalLabel, styles.grandTotalLabel]}>Total:</Text>
-            <Text style={[styles.totalValue, styles.grandTotalValue]}>${quote.total?.toFixed(2) ?? '0.00'}</Text>
+            {/* Apply optional chaining to quote as well */}
+            <Text style={[styles.totalValue, styles.grandTotalValue]}>${quote?.total?.toFixed(2) ?? '0.00'}</Text>
          </View>
       </View>
 
