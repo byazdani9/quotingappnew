@@ -111,10 +111,10 @@ const JobsScreen = () => {
     navigation.navigate('JobDetail', { jobId: jobId });
   };
 
-  const handleAddNewJob = () => {
-    // Navigate to JobDetail without a jobId to indicate creation
-    // TODO: JobDetailScreen needs to handle the case where jobId is undefined
-    navigation.navigate('JobDetail', {}); 
+  // Renamed function and changed navigation target
+  const handleAddNewEstimate = () => { 
+    // Navigate to EstimateBuilder without an estimateId to indicate creation
+    navigation.navigate('EstimateBuilder' as any, {}); // Use 'as any' for now due to cross-stack typing
   };
 
   const renderItem = ({ item }: { item: Job }) => {
@@ -175,9 +175,9 @@ const JobsScreen = () => {
         ListEmptyComponent={<Text style={styles.emptyText}>No jobs found.</Text>}
         contentContainerStyle={{ paddingBottom: 60 }} // Avoid overlap with button
       />
-      {/* Add New Job Button */}
-      <TouchableOpacity style={styles.addButton} onPress={handleAddNewJob}>
-        <Text style={styles.addButtonText}>+ Add New Job</Text>
+      {/* Add New Estimate Button */}
+      <TouchableOpacity style={styles.addButton} onPress={handleAddNewEstimate}>
+        <Text style={styles.addButtonText}>+ Add New Estimate</Text>
       </TouchableOpacity>
     </View>
   );

@@ -15,7 +15,9 @@ type Props = NativeStackScreenProps<EstimateStackParamList, 'EstimateBuilder'>;
 import { supabase } from '../../lib/supabaseClient';
 // Import the modal AND the exported type
 import QuoteItemModal, { QuoteItem } from '../../components/QuoteItem/QuoteItemModal';
-import { TouchableOpacity } from 'react-native'; // Ensure TouchableOpacity is imported
+import { TouchableOpacity, Button as NativeButton } from 'react-native'; // Add NativeButton for temporary use
+import CustomerModal from '../../components/Customer/CustomerModal'; // Import Customer Modal
+import { CustomerFormData } from '../../components/Customer/CustomerForm'; // Import Customer form data type
 
 // Define types for data (can be refined)
 type QuoteDetails = {
@@ -55,6 +57,23 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route }) => {
   const [isItemModalVisible, setIsItemModalVisible] = useState(false);
   const [itemToEdit, setItemToEdit] = useState<QuoteItem | null>(null);
   const [targetGroupId, setTargetGroupId] = useState<string | null>(null); // Track which group to add item to
+  const [isCustomerModalVisible, setIsCustomerModalVisible] = useState(false); // State for Customer Modal
+
+  // --- Customer Selection ---
+  const handleSelectCustomer = () => {
+    // TODO: If editing an existing quote, maybe pass current customerId?
+    setIsCustomerModalVisible(true);
+  };
+
+  // Renamed and updated to handle the saved Customer object from the modal
+  const handleCustomerSave = (savedCustomer: CustomerDetails) => { 
+    // TODO: When editing an existing quote, need to update quote.customer_id in DB and refetch.
+    // For now (creating or editing), just update the local customer state
+    setCustomer(savedCustomer); 
+    setIsCustomerModalVisible(false);
+    // If creating a new quote, we now have the customer object (including ID) ready
+  };
+  // --- End Customer Selection ---
 
   const fetchData = useCallback(async () => {
     // Only proceed if estimateId exists
@@ -124,8 +143,7 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route }) => {
       setLoading(false);
     }
     // Depend on estimateId to re-run if it changes (though unlikely in this setup)
-    // Depend on fetchData callback to ensure it's stable
-  }, [estimateId, fetchData]);
+  }, [estimateId]); // Remove fetchData dependency
 
   // Modified to accept optional groupId
   const handleAddItem = (groupId: string | null = null) => { 
@@ -382,7 +400,8 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route }) => {
 
     return { sortedGroups, ungroupedItems };
 
-  }, [groups, items]);
+    // Only depend on groups/items if we are viewing an existing estimate
+  }, estimateId ? [groups, items] : []); 
   // --- End of structuring logic ---
 
 
@@ -406,8 +425,11 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route }) => {
       <View style={styles.header}>
         {/* Conditionally display quote number or 'New Quote' */}
         <Text style={styles.quoteNumber}>{quote ? `Quote #: ${quote.estimate_id}` : 'New Estimate'}</Text> 
-        <Text>Customer: {customer ? `${customer.first_name} ${customer.last_name}` : 'N/A'}</Text>
-        {/* TODO: Add button to select/edit customer */}
+        <View style={styles.customerHeader}>
+            <Text>Customer: {customer ? `${customer.first_name} ${customer.last_name}` : 'N/A'}</Text>
+            {/* Button to select/change customer - enable always for now */}
+            <NativeButton title={customer ? "Change" : "Select Customer"} onPress={handleSelectCustomer} />
+        </View>
         <Text style={styles.totalText}>Total: ${quote?.total?.toFixed(2) ?? '0.00'}</Text>
       </View>
 
@@ -510,6 +532,13 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route }) => {
         // Pass the target group ID to the modal
         targetGroupId={targetGroupId} 
       />
+      <CustomerModal
+        isVisible={isCustomerModalVisible}
+        onClose={() => setIsCustomerModalVisible(false)}
+        onSave={handleCustomerSave} // Use correct prop name 'onSave'
+        // Pass current customer if editing? (Requires Customer type from modal)
+        // customerToEdit={estimateId ? customer : null} 
+      />
     </ScrollView>
   );
 };
@@ -536,6 +565,12 @@ const styles = StyleSheet.create({
   quoteNumber: {
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  customerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 5,
   },
   totalText: {
     fontSize: 16,

@@ -53,7 +53,7 @@ const QuoteItemForm: React.FC<QuoteItemFormProps> = ({
         unit_price: 0,
         ...initialData,
      });
-  }, [initialData]);
+  }, [JSON.stringify(initialData)]); // Depend on stringified content
 
   // Generic handler for text inputs
   const handleChange = (name: keyof QuoteItemFormData, value: string) => {
