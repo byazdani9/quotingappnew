@@ -11,9 +11,10 @@ import LoginScreen from './src/screens/Auth/LoginScreen';
 import SignUpScreen from './src/screens/Auth/SignUpScreen';
 // Import Main App Screens
 import DashboardScreen from './src/screens/Dashboard/DashboardScreen';
-import EstimatesScreen from './src/screens/Estimates/EstimatesScreen';
+import EstimatesScreen from './src/screens/Estimates/EstimatesScreen'; // Keep for EstimateStackNav if needed elsewhere
 import EstimateBuilderScreen from './src/screens/Estimates/EstimateBuilderScreen'; // Import Builder
 import JobsScreen from './src/screens/Jobs/JobsScreen';
+import JobDetailScreen from './src/screens/Jobs/JobDetailScreen'; // Import Job Detail
 import CostbooksScreen from './src/screens/Costbooks/CostbooksScreen';
 import SettingsScreen from './src/screens/Settings/SettingsScreen';
 import CustomersScreen from './src/screens/Customers/CustomersScreen'; // Import CustomersScreen
@@ -31,22 +32,34 @@ export type EstimateStackParamList = {
   EstimateBuilder: { estimateId?: string }; // Route for EstimateBuilderScreen, optional ID for editing
 };
 
+// Define types for the nested Job Stack
+export type JobStackParamList = {
+  JobList: undefined; // Route for JobsScreen
+  JobDetail: { jobId?: string }; // Route for JobDetailScreen, make jobId optional for creation
+  // EstimateBuilder might be navigated to from JobDetail, but defined elsewhere
+};
+
+
 // Define types for the Drawer navigator parameters
+// Add EstimateBuilder here for the hidden screen
 export type AppDrawerParamList = {
   Dashboard: undefined;
-  Estimates: undefined; // This will now point to the EstimateStack
-  Jobs: undefined;
+  // Estimates: undefined; // Removed from drawer
+  Jobs: undefined; // This will point to the JobStack
   Costbooks: undefined;
   Customers: undefined; // Add Customers to drawer params
   Settings: undefined;
+  EstimateBuilder: { estimateId?: string }; // Add EstimateBuilder route key
   // Add other main app screens here
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
-const EstimateStackNav = createNativeStackNavigator<EstimateStackParamList>(); // Estimate Stack Navigator
+const EstimateStackNav = createNativeStackNavigator<EstimateStackParamList>(); // Uncomment - Still needed by EstimateStackNavigator
+const JobStackNav = createNativeStackNavigator<JobStackParamList>(); // Job Stack Navigator
 const Drawer = createDrawerNavigator<AppDrawerParamList>(); // Create Drawer Navigator instance
 
-// Stack Navigator for Estimate related screens
+// Stack Navigator for Estimate related screens (Might still be needed if navigated to from elsewhere)
+// Keep this definition for now, but it's not directly in the drawer
 function EstimateStackNavigator() {
   return (
     <EstimateStackNav.Navigator screenOptions={{ headerShown: false }}>
@@ -57,20 +70,37 @@ function EstimateStackNavigator() {
   );
 }
 
+// Stack Navigator for Job related screens
+function JobStackNavigator() {
+  return (
+    <JobStackNav.Navigator screenOptions={{ headerShown: false }}>
+       <JobStackNav.Screen name="JobList" component={JobsScreen} />
+       <JobStackNav.Screen name="JobDetail" component={JobDetailScreen} />
+       {/* We navigate to EstimateBuilder from JobDetail, but define EstimateBuilder screen at Drawer level */}
+    </JobStackNav.Navigator>
+  );
+}
+
 
 // Main App component using Drawer Navigator
 function MainAppDrawer() {
   return (
     <Drawer.Navigator initialRouteName="Dashboard">
       <Drawer.Screen name="Dashboard" component={DashboardScreen} />
-      {/* Use render prop syntax for nesting */}
-      <Drawer.Screen name="Estimates">
-        {() => <EstimateStackNavigator />}
+      {/* Estimates screen removed from drawer - accessed via Jobs */}
+      <Drawer.Screen name="Jobs">
+         {() => <JobStackNavigator />}
       </Drawer.Screen>
-      <Drawer.Screen name="Jobs" component={JobsScreen} />
       <Drawer.Screen name="Customers" component={CustomersScreen} />
       <Drawer.Screen name="Costbooks" component={CostbooksScreen} />
       <Drawer.Screen name="Settings" component={SettingsScreen} />
+      {/* Add EstimateBuilder here so it can be navigated to from JobDetail */}
+      {/* It won't appear in the drawer UI, but is part of the navigator */}
+       <Drawer.Screen 
+         name="EstimateBuilder" 
+         component={EstimateBuilderScreen} 
+         options={{ drawerItemStyle: { height: 0 } }} // Hide from drawer list visually
+       />
       {/* Add other screens to the drawer */}
     </Drawer.Navigator>
   );

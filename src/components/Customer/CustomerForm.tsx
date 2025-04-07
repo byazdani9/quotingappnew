@@ -11,7 +11,7 @@ export type CustomerFormData = {
   email?: string | null;
   address?: string | null; // Street address
   city?: string | null;
-  state?: string | null; // Province/State
+  // state?: string | null; // Removed - No corresponding DB column confirmed
   postal_code?: string | null;
   notes?: string | null;
   // We likely won't edit coordinates, source, status, or timestamps directly in this form
@@ -38,7 +38,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
     email: null,
     address: null,
     city: null,
-    state: null,
+    // state: null, // Removed
     postal_code: null,
     notes: null,
     ...initialData, // Spread initial data over defaults
@@ -46,20 +46,28 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
 
   // Update form if initialData changes (e.g., when opening modal for editing)
   useEffect(() => {
-    setFormData({
-        first_name: '',
-        last_name: '',
-        company_name: null,
-        phone: null,
-        email: null,
-        address: null,
-        city: null,
-        state: null,
-        postal_code: null,
-        notes: null,
-        ...initialData,
-    });
-  }, [initialData]);
+    // Only update if initialData is actually provided and has content
+    if (initialData && Object.keys(initialData).length > 0) {
+      setFormData({
+          first_name: '',
+          last_name: '',
+          company_name: null,
+          phone: null,
+          email: null,
+          address: null,
+          city: null,
+          // state: null, // Removed
+          postal_code: null,
+          notes: null,
+          ...initialData,
+      });
+    } else if (!initialData || Object.keys(initialData).length === 0) {
+       // Optionally reset form if initialData becomes empty/null after being set
+       // Or just rely on initial state if creating new
+       // Let's keep the initial state logic simple for now
+    }
+    // Depend on the stringified content of initialData to prevent infinite loops
+  }, [JSON.stringify(initialData)]); 
 
 
   const handleChange = (name: keyof CustomerFormData, value: string) => {
@@ -144,14 +152,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
         autoCapitalize="words"
       />
 
-      <Text style={styles.label}>State / Province</Text>
-      <TextInput
-        style={styles.input}
-        value={formData.state ?? ''}
-        onChangeText={value => handleChange('state', value)}
-        placeholder="Enter state or province"
-        autoCapitalize="words" // Or use specific state codes if needed
-      />
+      {/* State / Province Input Removed */}
 
       <Text style={styles.label}>Postal / Zip Code</Text>
       <TextInput

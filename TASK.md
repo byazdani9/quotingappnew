@@ -23,6 +23,7 @@
   - [ ] Configure Supabase Auth settings (Providers, Templates, Security).
   - [ ] Set `user_role` in user_metadata for users.
   - [ ] Deployment setup (Frontend app distribution).
+  - [ ] Implement Responsive Layouts (Tablet/Phone).
 
 ## Completed
 - **2025-04-03:** Successfully migrated core code and dependencies to a fresh RN 0.78.0 project (`QuotingAppNew`) to resolve build/runtime issues.
