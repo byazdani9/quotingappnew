@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native'; // Added useNavigation
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'; // Added for type safety
 import { supabase } from '../../lib/supabaseClient'; // Adjust path if needed
 import { JobStackParamList } from '../../../App'; // Import the stack param list
+import { useTheme } from 'react-native-paper'; // Import useTheme
 
 // Define type for related Customer data (adjust fields as needed)
 type RelatedCustomer = {
@@ -37,18 +38,18 @@ type JobsScreenNavigationProp = NativeStackNavigationProp<
 
 
 const JobsScreen = () => {
+  const theme = useTheme(); // Get theme object
   const navigation = useNavigation<JobsScreenNavigationProp>(); // Hook for navigation
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log('>>> JobsScreen useEffect fired <<<'); // Add log here
+    // console.log('>>> JobsScreen useEffect fired <<<'); // Remove log
     fetchJobs();
   }, []);
 
   const fetchJobs = async () => {
-    // console.log('>>> FETCHJOBS START <<<'); // Remove log
     setLoading(true);
     setError(null);
     let rawData = null; // Variable to hold data outside try/catch
@@ -75,25 +76,17 @@ const JobsScreen = () => {
       fetchErrorObj = error; // Store error object
       rawData = data; // Store data object
 
-      // Log immediately after fetch attempt
-      // console.log('>>> Supabase fetch attempted. Error:', fetchErrorObj); // Remove log
-      // console.log('>>> Raw data received:', JSON.stringify(rawData?.slice(0, 2), null, 2)); // Remove log
-
       if (fetchErrorObj) {
-        // Throw error to be caught below, but log it first
-        // console.error('>>> Throwing Supabase fetch error:', fetchErrorObj); // Remove log
         throw fetchErrorObj;
       }
 
     } catch (e: any) {
-      // console.error('>>> fetchJobs caught error:', e); // Remove log
       setError(e.message || 'An unknown error occurred');
-      Alert.alert('Error fetching jobs', e.message || 'An unknown error occurred'); // Restore Alert
+      Alert.alert('Error fetching jobs', e.message || 'An unknown error occurred'); 
     } finally {
-      // console.log('>>> fetchJobs finally block <<<'); // Remove log
       // Update state outside try/catch to ensure it happens regardless of errors inside try
       if (rawData && !fetchErrorObj) {
-         console.log('>>> Transforming and setting jobs state <<<');
+         // console.log('>>> Transforming and setting jobs state <<<'); // Remove log
          // Explicitly map rawData to ensure type correctness, especially for 'customer'
          const formattedJobs: Job[] = rawData.map((job: any) => ({
            job_id: job.job_id,
@@ -107,7 +100,7 @@ const JobsScreen = () => {
          }));
          setJobs(formattedJobs);
       } else {
-         console.log('>>> Setting empty jobs state due to error or no data <<<');
+         // console.log('>>> Setting empty jobs state due to error or no data <<<'); // Remove log
          setJobs([]); // Set empty on error or no data
       }
       setLoading(false);
@@ -173,7 +166,7 @@ const JobsScreen = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Text style={styles.title}>Jobs Dashboard</Text>
       <FlatList
         data={jobs}
@@ -194,6 +187,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 10,
+    // backgroundColor applied inline
   },
   centered: { // Added for loading/error states
     flex: 1,

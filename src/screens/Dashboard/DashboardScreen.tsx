@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, ActivityIndicator } from 'react-native';
-// TODO: Import supabase client when fetching real data
-// import { supabase } from '../../lib/supabaseClient'; 
+import { useTheme } from 'react-native-paper'; // Import useTheme
+// Import supabase client
+import { supabase } from '../../lib/supabaseClient'; 
 
 // Placeholder data structure
 type JobStatusSummary = {
@@ -11,6 +12,7 @@ type JobStatusSummary = {
 };
 
 const DashboardScreen = () => {
+  const theme = useTheme(); // Get theme object
   // TODO: Replace with state for fetched data
   const [summaryData, setSummaryData] = useState<JobStatusSummary[]>([
     { status: 'Leads', count: 0, amount: 0 },
@@ -19,40 +21,40 @@ const DashboardScreen = () => {
     { status: 'Work Completed', count: 0, amount: 0 },
     { status: 'Closed', count: 0, amount: 0 },
   ]);
-  const [loading, setLoading] = useState(false); // Set to true when fetching real data
+  const [loading, setLoading] = useState(true); // Start loading on mount
   const [error, setError] = useState<string | null>(null);
 
-  // TODO: Add useEffect to fetch real data from Supabase
-  // useEffect(() => {
-  //   const fetchSummary = async () => {
-  //     setLoading(true);
-  //     setError(null);
-  //     try {
-  //       // Call a Supabase function (e.g., get_job_status_summary)
-  //       // const { data, error } = await supabase.rpc('get_job_status_summary');
-  //       // if (error) throw error;
-  //       // setSummaryData(data); 
-  //       // --- Using placeholder for now ---
-  //       await new Promise(resolve => setTimeout(resolve, 500)); // Simulate fetch
-  //       setSummaryData([
-  //         { status: 'Leads', count: 5, amount: 50000 },
-  //         { status: 'Contract Signed', count: 3, amount: 75000 },
-  //         { status: 'Work Started', count: 2, amount: 60000 },
-  //         { status: 'Work Completed', count: 10, amount: 250000 },
-  //         { status: 'Closed', count: 8, amount: 180000 },
-  //       ]);
-  //       // --- End placeholder ---
-  //     } catch (e: any) {
-  //       setError(e.message);
-  //     } finally {
-  //       setLoading(false);
-  //     }
-  //   };
-  //   fetchSummary();
-  // }, []);
+  // Fetch real data from Supabase
+  useEffect(() => {
+    const fetchSummary = async () => {
+      // setLoading(true); // Already set to true initially
+      setError(null);
+      try {
+        // Call the simplified V1 Supabase function
+        const { data, error: rpcError } = await supabase.rpc('get_dashboard_summary_v1');
+
+        if (rpcError) throw rpcError;
+
+        // Ensure data is an array before setting state
+        if (Array.isArray(data)) {
+           // TODO: Might need to map/transform data if function returns different structure
+           setSummaryData(data as JobStatusSummary[]); 
+        } else {
+           console.warn('Received unexpected data format from get_job_status_summary:', data);
+           setSummaryData([]); // Set to empty array if format is wrong
+        }
+
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSummary();
+  }, []); // Empty dependency array means run once on mount
 
   return (
-    <ScrollView style={styles.scrollView}>
+    <ScrollView style={[styles.scrollView, { backgroundColor: theme.colors.background }]}>
       <View style={styles.container}>
         {/* Logo */}
         <Image 
@@ -103,17 +105,18 @@ const DashboardScreen = () => {
 const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
-    backgroundColor: '#fff', // Or your desired background
+    // backgroundColor applied inline using theme
   },
   container: {
     flex: 1,
     padding: 15,
   },
   logo: {
-    width: '80%', // Adjust as needed
-    height: 100, // Adjust as needed
+    // width: '80%', // Remove width to rely on height + resizeMode
+    height: 176, // Increased height by 10% from 160
     alignSelf: 'center',
-    marginBottom: 20,
+    marginTop: 10, // Add some top margin
+    marginBottom: 10, // Add back smaller bottom margin
   },
   section: {
     marginBottom: 25,

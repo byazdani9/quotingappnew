@@ -5,6 +5,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createDrawerNavigator } from '@react-navigation/drawer'; // Import Drawer Navigator
 import { Session } from '@supabase/supabase-js';
+import { Provider as PaperProvider } from 'react-native-paper'; // Import PaperProvider
+import { theme } from './src/theme'; // Import custom theme
 
 import { supabase } from './src/lib/supabaseClient';
 import LoginScreen from './src/screens/Auth/LoginScreen';
@@ -15,6 +17,7 @@ import EstimatesScreen from './src/screens/Estimates/EstimatesScreen'; // Keep f
 import EstimateBuilderScreen from './src/screens/Estimates/EstimateBuilderScreen'; // Import Builder
 import JobsScreen from './src/screens/Jobs/JobsScreen';
 import JobDetailScreen from './src/screens/Jobs/JobDetailScreen'; // Import Job Detail
+import ChangeOrdersScreen from './src/screens/Jobs/ChangeOrdersScreen'; // Import Change Orders
 import CostbooksScreen from './src/screens/Costbooks/CostbooksScreen';
 import SettingsScreen from './src/screens/Settings/SettingsScreen';
 import CustomersScreen from './src/screens/Customers/CustomersScreen'; // Import CustomersScreen
@@ -36,6 +39,7 @@ export type EstimateStackParamList = {
 export type JobStackParamList = {
   JobList: undefined; // Route for JobsScreen
   JobDetail: { jobId?: string }; // Route for JobDetailScreen, make jobId optional for creation
+  ChangeOrders: { jobId: string }; // Add ChangeOrders route, requires jobId
   // EstimateBuilder might be navigated to from JobDetail, but defined elsewhere
 };
 
@@ -76,6 +80,7 @@ function JobStackNavigator() {
     <JobStackNav.Navigator screenOptions={{ headerShown: false }}>
        <JobStackNav.Screen name="JobList" component={JobsScreen} />
        <JobStackNav.Screen name="JobDetail" component={JobDetailScreen} />
+       <JobStackNav.Screen name="ChangeOrders" component={ChangeOrdersScreen} /> 
        {/* We navigate to EstimateBuilder from JobDetail, but define EstimateBuilder screen at Drawer level */}
     </JobStackNav.Navigator>
   );
@@ -141,11 +146,13 @@ function App(): React.JSX.Element {
     );
   }
 
+  // Logs removed
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer>
-        <StatusBar barStyle={'dark-content'} />
-        {session && session.user ? (
+    <PaperProvider theme={theme}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <NavigationContainer>
+          <StatusBar barStyle={'dark-content'} />
+          {session && session.user ? (
         // User is logged in - Show main app Drawer Navigator
         <MainAppDrawer />
       ) : (
@@ -162,9 +169,10 @@ function App(): React.JSX.Element {
             // options={{ headerShown: false }} // Moved to screenOptions
           />
         </AuthStack.Navigator>
-        )}
-      </NavigationContainer>
-    </GestureHandlerRootView>
+          )}
+        </NavigationContainer>
+      </GestureHandlerRootView>
+    </PaperProvider>
   );
 }
 
