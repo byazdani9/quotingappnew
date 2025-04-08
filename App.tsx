@@ -7,6 +7,7 @@ import { createDrawerNavigator } from '@react-navigation/drawer'; // Import Draw
 import { Session } from '@supabase/supabase-js';
 import { Provider as PaperProvider } from 'react-native-paper'; // Import PaperProvider
 import { theme } from './src/theme'; // Import custom theme
+import { EstimateBuilderProvider } from './src/contexts/EstimateBuilderContext'; // Import the context provider
 
 import { supabase } from './src/lib/supabaseClient';
 import LoginScreen from './src/screens/Auth/LoginScreen';
@@ -15,12 +16,16 @@ import SignUpScreen from './src/screens/Auth/SignUpScreen';
 import DashboardScreen from './src/screens/Dashboard/DashboardScreen';
 import EstimatesScreen from './src/screens/Estimates/EstimatesScreen'; // Keep for EstimateStackNav if needed elsewhere
 import EstimateBuilderScreen from './src/screens/Estimates/EstimateBuilderScreen'; // Import Builder
+import NewEstimateDetailsScreen from './src/screens/Estimates/NewEstimateDetailsScreen'; // Import new screen
 import JobsScreen from './src/screens/Jobs/JobsScreen';
 import JobDetailScreen from './src/screens/Jobs/JobDetailScreen'; // Import Job Detail
 import ChangeOrdersScreen from './src/screens/Jobs/ChangeOrdersScreen'; // Import Change Orders
 import CostbooksScreen from './src/screens/Costbooks/CostbooksScreen';
 import SettingsScreen from './src/screens/Settings/SettingsScreen';
 import CustomersScreen from './src/screens/Customers/CustomersScreen'; // Import CustomersScreen
+// Import the CustomerModalScreen with correct path
+import CustomerModalScreen from './src/screens/Customers/CustomerModalScreen'; // Correct path
+import CustomerSelectionScreen from './src/screens/Customers/CustomerSelectionScreen'; // Import the selection screen
 
 
 // Define types for the navigation stack parameters
@@ -40,20 +45,27 @@ export type JobStackParamList = {
   JobList: undefined; // Route for JobsScreen
   JobDetail: { jobId?: string }; // Route for JobDetailScreen, make jobId optional for creation
   ChangeOrders: { jobId: string }; // Add ChangeOrders route, requires jobId
-  // EstimateBuilder might be navigated to from JobDetail, but defined elsewhere
+  CustomerModalScreen: { customerToEdit?: any, onSaveSuccessRoute?: string }; // Screen for Customer Modal form
+  // Update CustomerSelectionScreen to accept jobTitle and templateId
+  CustomerSelectionScreen: { jobTitle: string; templateId?: string }; 
+  EstimateBuilder: { estimateId?: string, jobId?: string, selectedCustomer?: any, jobTitle?: string, templateId?: string }; // Updated params
+  NewEstimateDetails: undefined; // New screen for job title and template selection
 };
 
+
+import { NavigatorScreenParams } from '@react-navigation/native'; // Import NavigatorScreenParams
 
 // Define types for the Drawer navigator parameters
 // Add EstimateBuilder here for the hidden screen
 export type AppDrawerParamList = {
   Dashboard: undefined;
   // Estimates: undefined; // Removed from drawer
-  Jobs: undefined; // This will point to the JobStack
+  // Update Jobs to accept JobStackParamList parameters
+  Jobs: NavigatorScreenParams<JobStackParamList> | undefined; 
   Costbooks: undefined;
   Customers: undefined; // Add Customers to drawer params
   Settings: undefined;
-  EstimateBuilder: { estimateId?: string }; // Add EstimateBuilder route key
+  // EstimateBuilder: { estimateId?: string }; // REMOVE EstimateBuilder from Drawer params
   // Add other main app screens here
 };
 
@@ -77,12 +89,40 @@ function EstimateStackNavigator() {
 // Stack Navigator for Job related screens
 function JobStackNavigator() {
   return (
-    <JobStackNav.Navigator screenOptions={{ headerShown: false }}>
-       <JobStackNav.Screen name="JobList" component={JobsScreen} />
-       <JobStackNav.Screen name="JobDetail" component={JobDetailScreen} />
-       <JobStackNav.Screen name="ChangeOrders" component={ChangeOrdersScreen} /> 
-       {/* We navigate to EstimateBuilder from JobDetail, but define EstimateBuilder screen at Drawer level */}
-    </JobStackNav.Navigator>
+    // REMOVED Provider wrapping the entire navigator
+    // <EstimateBuilderProvider> // Keep provider removed from wrapping the whole navigator
+      <JobStackNav.Navigator>
+        {/* Screens NOT needing the context */}
+        <JobStackNav.Screen name="JobList" component={JobsScreen} options={{ headerShown: false }}/>
+        <JobStackNav.Screen name="JobDetail" component={JobDetailScreen} options={{ headerShown: false }}/>
+        <JobStackNav.Screen name="ChangeOrders" component={ChangeOrdersScreen} options={{ headerShown: false }}/>
+        <JobStackNav.Screen name="NewEstimateDetails" component={NewEstimateDetailsScreen} options={{ headerShown: false }}/>
+
+        {/* Screens needing the context - Wrap these in a Group wrapped by the Provider */}
+        <JobStackNav.Group screenOptions={{ headerShown: false }}>
+           {/* Wrap the Group content with the Provider */}
+           <JobStackNav.Screen name="CustomerSelectionScreen">
+             {(props) => (
+               <EstimateBuilderProvider>
+                 <CustomerSelectionScreen {...props} />
+               </EstimateBuilderProvider>
+             )}
+           </JobStackNav.Screen>
+           <JobStackNav.Screen name="EstimateBuilder">
+             {(props) => (
+               <EstimateBuilderProvider>
+                 <EstimateBuilderScreen {...props} />
+               </EstimateBuilderProvider>
+             )}
+           </JobStackNav.Screen>
+        </JobStackNav.Group>
+        {/* Define Modal Screens in a separate group */}
+        <JobStackNav.Group screenOptions={{ presentation: 'modal', headerShown: false }}>
+          <JobStackNav.Screen name="CustomerModalScreen" component={CustomerModalScreen} />
+          {/* Add other modal screens for this stack here if needed */}
+        </JobStackNav.Group>
+      </JobStackNav.Navigator>
+    // </EstimateBuilderProvider> // REMOVED Provider closing tag
   );
 }
 
@@ -93,19 +133,11 @@ function MainAppDrawer() {
     <Drawer.Navigator initialRouteName="Dashboard">
       <Drawer.Screen name="Dashboard" component={DashboardScreen} />
       {/* Estimates screen removed from drawer - accessed via Jobs */}
-      <Drawer.Screen name="Jobs">
-         {() => <JobStackNavigator />}
-      </Drawer.Screen>
+      <Drawer.Screen name="Jobs" component={JobStackNavigator} />
       <Drawer.Screen name="Customers" component={CustomersScreen} />
       <Drawer.Screen name="Costbooks" component={CostbooksScreen} />
       <Drawer.Screen name="Settings" component={SettingsScreen} />
-      {/* Add EstimateBuilder here so it can be navigated to from JobDetail */}
-      {/* It won't appear in the drawer UI, but is part of the navigator */}
-       <Drawer.Screen 
-         name="EstimateBuilder" 
-         component={EstimateBuilderScreen} 
-         options={{ drawerItemStyle: { height: 0 } }} // Hide from drawer list visually
-       />
+      {/* EstimateBuilder screen removed from Drawer */}
       {/* Add other screens to the drawer */}
     </Drawer.Navigator>
   );
@@ -153,30 +185,27 @@ function App(): React.JSX.Element {
         <NavigationContainer>
           <StatusBar barStyle={'dark-content'} />
           {session && session.user ? (
-        // User is logged in - Show main app Drawer Navigator
-        <MainAppDrawer />
-      ) : (
-        // User is not logged in - Show authentication stack
-        <AuthStack.Navigator screenOptions={{ headerShown: false }}>
-          <AuthStack.Screen
-            name="Login"
-            component={LoginScreen}
-            // options={{ headerShown: false }} // Moved to screenOptions
-          />
-          <AuthStack.Screen
-            name="SignUp"
-            component={SignUpScreen}
-            // options={{ headerShown: false }} // Moved to screenOptions
-          />
-        </AuthStack.Navigator>
+            // User is logged in - Show main app Drawer Navigator
+            <MainAppDrawer />
+          ) : (
+            // User is not logged in - Show authentication stack
+            <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+              <AuthStack.Screen
+                name="Login"
+                component={LoginScreen}
+                // options={{ headerShown: false }} // Moved to screenOptions
+              />
+              <AuthStack.Screen
+                name="SignUp"
+                component={SignUpScreen}
+                // options={{ headerShown: false }} // Moved to screenOptions
+              />
+            </AuthStack.Navigator>
           )}
         </NavigationContainer>
       </GestureHandlerRootView>
     </PaperProvider>
   );
 }
-
-// Removed redundant Button import
-
 
 export default App;

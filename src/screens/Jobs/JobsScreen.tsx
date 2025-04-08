@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity } from 'react-native'; // Added TouchableOpacity
-import { useNavigation } from '@react-navigation/native'; // Added useNavigation
-import { NativeStackNavigationProp } from '@react-navigation/native-stack'; // Added for type safety
-import { supabase } from '../../lib/supabaseClient'; // Adjust path if needed
-import { JobStackParamList } from '../../../App'; // Import the stack param list
-import { useTheme } from 'react-native-paper'; // Import useTheme
+import React, { useState, useEffect, useCallback } from 'react'; // Import useCallback
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { supabase } from '../../lib/supabaseClient';
+import { JobStackParamList } from '../../../App';
+import { useTheme, TextInput } from 'react-native-paper'; // Import TextInput
+// import { useEstimateBuilder } from '../../contexts/EstimateBuilderContext'; // REMOVED context hook import
+import AppModal from '../../components/Modal/AppModal'; // Import the modal
+import JobSetupForm from '../../components/Job/JobSetupForm'; // Import the form
 
 // Define type for related Customer data (adjust fields as needed)
 type RelatedCustomer = {
@@ -43,13 +46,25 @@ const JobsScreen = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isJobSetupModalVisible, setIsJobSetupModalVisible] = useState(false); // State for modal
+  const [searchTerm, setSearchTerm] = useState(''); // State for search input
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(''); // State for debounced search
 
+  // Debounce effect
   useEffect(() => {
-    // console.log('>>> JobsScreen useEffect fired <<<'); // Remove log
-    fetchJobs();
-  }, []);
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500); // Wait 500ms after user stops typing
 
-  const fetchJobs = async () => {
+    // Cleanup function
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [searchTerm]);
+
+
+  // Update fetchJobs to use debouncedSearchTerm and useCallback
+  const fetchJobs = useCallback(async () => { 
     setLoading(true);
     setError(null);
     let rawData = null; // Variable to hold data outside try/catch
@@ -68,13 +83,30 @@ const JobsScreen = () => {
         amount, 
         customer:customers ( customer_id, first_name, last_name, address, city, postal_code )
       `;
-      const { data, error } = await supabase
+      // Declare query with let so it can be modified
+      let query = supabase 
         .from('jobs')
         .select(selectQuery)
-        .order('created_at', { ascending: false }); // Order by creation time
+        .order('created_at', { ascending: false }); 
       
-      fetchErrorObj = error; // Store error object
-      rawData = data; // Store data object
+      // Add search filter using .or()
+      if (debouncedSearchTerm) {
+        const searchTermPattern = `%${debouncedSearchTerm}%`;
+        // Search job name, number, customer first/last name
+        // Note: Searching related tables directly in .or() can be complex.
+        // It might be simpler to filter client-side or use an RPC function if performance suffers.
+        // For now, let's try filtering job name/number and customer name (requires join).
+        // This specific query might need adjustment based on exact Supabase capabilities/performance.
+        // A simpler initial approach might be just job name/number:
+        query = query.or(`name.ilike.${searchTermPattern},number.ilike.${searchTermPattern}`);
+        // TODO: Add customer name search if feasible/needed, potentially via RPC or client-side filter.
+      }
+
+      // Execute the final query and assign results to existing variables
+      const { data: queryData, error: queryError } = await query; 
+
+      fetchErrorObj = queryError; // Store error object from the final query
+      rawData = queryData; // Store data object from the final query
 
       if (fetchErrorObj) {
         throw fetchErrorObj;
@@ -105,16 +137,38 @@ const JobsScreen = () => {
       }
       setLoading(false);
     }
-  };
+  // Add debouncedSearchTerm to dependency array
+  }, [debouncedSearchTerm]); 
+
+  // useEffect to call fetchJobs when debouncedSearchTerm changes
+  useEffect(() => {
+    fetchJobs();
+  }, [fetchJobs]); // fetchJobs is now stable due to useCallback
 
   const handleNavigateToDetail = (jobId: string) => {
     navigation.navigate('JobDetail', { jobId: jobId });
   };
 
-  // Renamed function and changed navigation target
-  const handleAddNewEstimate = () => { 
-    // Navigate to EstimateBuilder without an estimateId to indicate creation
-    navigation.navigate('EstimateBuilder' as any, {}); // Use 'as any' for now due to cross-stack typing
+  // REMOVED context usage
+  // const { setSelectedCustomer } = useEstimateBuilder();
+
+  // Function to open the modal
+  const handleAddNewEstimate = () => {
+    // REMOVED setSelectedCustomer(null);
+    // Delay setting modal visible slightly (keep this for now, might still help with modal rendering)
+    setTimeout(() => {
+        setIsJobSetupModalVisible(true);
+    }, 0); // 0ms delay pushes it to the next event loop tick
+  };
+
+  // Function to handle modal submission and navigate
+  const handleJobSetupSubmit = (title: string, templateId?: string | null) => {
+    setIsJobSetupModalVisible(false); // Close modal
+    // Navigate to Customer Selection, passing title and templateId
+    navigation.navigate('CustomerSelectionScreen', {
+      jobTitle: title,
+      templateId: templateId ?? undefined, // Pass undefined if null
+    });
   };
 
   const renderItem = ({ item }: { item: Job }) => {
@@ -168,6 +222,18 @@ const JobsScreen = () => {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Text style={styles.title}>Jobs Dashboard</Text>
+      
+      {/* Search Input */}
+      <TextInput
+        label="Search Jobs..."
+        value={searchTerm}
+        onChangeText={setSearchTerm}
+        mode="outlined"
+        style={styles.searchInput}
+        dense // Make it slightly smaller
+        // Add clear button if desired (requires handling)
+      />
+
       <FlatList
         data={jobs}
         renderItem={renderItem}
@@ -179,6 +245,18 @@ const JobsScreen = () => {
       <TouchableOpacity style={styles.addButton} onPress={handleAddNewEstimate}>
         <Text style={styles.addButtonText}>+ Add New Estimate</Text>
       </TouchableOpacity>
+
+      {/* Job Setup Modal */}
+      <AppModal
+        isVisible={isJobSetupModalVisible}
+        onDismiss={() => setIsJobSetupModalVisible(false)}
+        title="Setup New Job"
+      >
+        <JobSetupForm
+          onCancel={() => setIsJobSetupModalVisible(false)}
+          onSubmit={handleJobSetupSubmit}
+        />
+      </AppModal>
     </View>
   );
 };
@@ -306,6 +384,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  searchInput: { // Style for the search input
+    marginHorizontal: 5, // Align with container padding
+    marginBottom: 10,
   },
 });
 
