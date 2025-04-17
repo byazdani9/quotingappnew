@@ -3,7 +3,9 @@ import { View, StyleSheet, ActivityIndicator, Alert, ScrollView } from 'react-na
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { JobStackParamList } from '../../../App'; // Import correct param list
 import { supabase } from '../../lib/supabaseClient';
-import { List, Card, Text, Button, Divider, Subheading, ActivityIndicator as PaperActivityIndicator, useTheme } from 'react-native-paper'; // Import Paper components
+import { List, Card, Text, Button, Divider, Subheading, ActivityIndicator as PaperActivityIndicator, useTheme } from 'react-native-paper';
+import AppModal from '../../components/Modal/AppModal'; // Import AppModal
+import JobSetupForm from '../../components/Job/JobSetupForm'; // Import JobSetupForm
 
 // Define specific types based on known DB columns and UI needs
 type JobDetailsType = {
@@ -36,6 +38,7 @@ type Props = NativeStackScreenProps<JobStackParamList, 'JobDetail'>;
 
 const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const jobId = route.params?.jobId; // Get optional jobId
+  const estimateIdParam = route.params?.estimateId; // Get optional estimateId from params
   const theme = useTheme(); // Access theme for styling
 
   const [job, setJob] = useState<JobDetailsType | null>(null);
@@ -43,8 +46,21 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const [estimateId, setEstimateId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false); // State for edit modal
 
   useEffect(() => {
+    // If estimateIdParam is provided, set it as the estimateId and navigate directly to EstimateBuilder
+    if (estimateIdParam) {
+      console.log('Received estimateIdParam:', estimateIdParam); // Debug log
+      setEstimateId(estimateIdParam);
+      // Use setTimeout to ensure navigation happens after component is mounted and state is updated
+      setTimeout(() => {
+        console.log('Navigating with estimateId:', estimateIdParam); // Debug log
+        handleNavigateToEstimate(true); // Pass true to indicate we're coming from estimateIdParam
+      }, 100); // Increased timeout to ensure state is updated
+      return;
+    }
+
     // Handle create mode (no jobId)
     if (!jobId) {
       // TODO: Implement UI for creating a new job
@@ -99,10 +115,108 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
     fetchJobDetails();
   }, [jobId]);
 
-  const handleNavigateToEstimate = () => {
+  const handleDeleteJob = async () => {
+    if (!jobId) return; // Should not happen if button is only shown when jobId exists
+
+    Alert.alert(
+      "Confirm Deletion",
+      "Are you sure you want to delete this job? This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive", 
+          onPress: async () => {
+            try {
+              setLoading(true); // Show loading indicator during delete
+              const { error: deleteError } = await supabase
+                .from('jobs')
+                .delete()
+                .eq('job_id', jobId);
+              
+              if (deleteError) throw deleteError;
+
+              Alert.alert("Success", "Job deleted successfully.");
+              
+              // Check if we have a customer_id to navigate back to
+              if (job && job.customer_id) {
+                // Use CommonActions to navigate back to the customer detail screen
+                const { CommonActions } = require('@react-navigation/native');
+                navigation.dispatch(
+                  CommonActions.navigate({
+                    name: 'Customers',
+                    params: {
+                      screen: 'CustomerDetail',
+                      params: { customerId: job.customer_id }
+                    }
+                  })
+                );
+                return;
+              }
+              
+              // Default fallback: just go back one screen
+              navigation.goBack();
+
+            } catch (e: any) {
+              setError(e.message); // Set error state
+              Alert.alert('Error Deleting Job', e.message);
+            } finally {
+              setLoading(false); // Hide loading indicator
+            }
+          } 
+        },
+      ]
+    );
+  };
+
+  const handleOpenEditModal = () => {
+    setIsEditModalVisible(true);
+  };
+
+  const handleJobEditSubmit = async (updatedTitle: string, updatedTemplateId?: string | null) => {
+    if (!jobId || !job) return; // Should not happen
+
+    // For now, we only update the title (name). Template update logic TBD.
+    const updates = { name: updatedTitle }; 
+
+    try {
+      setLoading(true); // Show loading indicator
+      setIsEditModalVisible(false); // Close modal immediately
+
+      const { data: updatedJobData, error: updateError } = await supabase
+        .from('jobs')
+        .update(updates)
+        .eq('job_id', jobId)
+        .select() // Select the updated row
+        .single(); // Expecting a single row back
+
+      if (updateError) throw updateError;
+      if (!updatedJobData) throw new Error("Failed to retrieve updated job data.");
+
+      // Update local state with the returned data
+      setJob(updatedJobData as JobDetailsType); 
+      Alert.alert("Success", "Job details updated.");
+
+    } catch (e: any) {
+      setError(e.message);
+      Alert.alert('Error Updating Job', e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNavigateToEstimate = (fromEstimateIdParam = false) => {
     if (estimateId) {
       // Use 'as any' for cross-stack navigation type workaround
-      navigation.navigate('EstimateBuilder' as any, { estimateId: estimateId }); 
+      if (fromEstimateIdParam) {
+        // If we're coming from CustomerDetailScreen with estimateId param,
+        // navigate directly to EstimateBuilder and replace the current screen
+        // This will allow the back button to go back to CustomerDetailScreen
+        navigation.replace('EstimateBuilder' as any, { estimateId: estimateId });
+      } else {
+        // Normal navigation from JobDetail screen
+        navigation.navigate('EstimateBuilder' as any, { estimateId: estimateId });
+      }
     } else {
       Alert.alert('No Estimate Found', 'This job does not have an associated estimate.');
     }
@@ -141,10 +255,16 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
   const jobSiteAddress = job ? [job.address, job.city, job.postal_code].filter(Boolean).join(', ') : 'N/A';
   const estimateTotalString = job.amount?.toLocaleString(undefined, { style: 'currency', currency: 'CAD' }) ?? 'N/A'; // Assuming job.amount holds estimate total for now
 
+  // Create a wrapper function for the List.Item onPress handler
+  const handleEstimatePress = () => {
+    handleNavigateToEstimate(false); // Call with false to indicate normal navigation
+  };
+
   // Placeholder data for actions list - using List.Item from Paper
   const actions = [
-      { key: 'job_info', title: 'Job Info', icon: 'information-outline', onPress: () => Alert.alert("TODO", "Navigate to Job Info Screen") }, // Example placeholder onPress
-      { key: 'estimate', title: 'Estimate', description: estimateTotalString, onPress: handleNavigateToEstimate, disabled: !estimateId, icon: 'file-document-outline' },
+      // Update Job Info action to open the edit modal
+      { key: 'job_info', title: 'Job Info', icon: 'information-outline', onPress: handleOpenEditModal }, 
+      { key: 'estimate', title: 'Estimate', description: estimateTotalString, onPress: handleEstimatePress, disabled: !estimateId, icon: 'file-document-outline' },
       { key: 'change_orders', title: 'Change Orders', description: 'None', icon: 'file-sync-outline', onPress: () => navigation.navigate('ChangeOrders', { jobId: jobId! }) }, // Navigate to Change Orders
       { key: 'credits', title: 'Credits', description: 'None', icon: 'credit-card-minus-outline' },
       { key: 'job_total', title: 'Job Total', description: estimateTotalString, icon: 'calculator' }, // Placeholder
@@ -216,17 +336,40 @@ const JobDetailScreen: React.FC<Props> = ({ route, navigation }) => {
             </View>
         </View>
 
-        {/* Footer Button */}
+        {/* Footer Buttons */}
         <View style={styles.footer}>
+            <Button 
+                mode="outlined" // Changed to outlined for less emphasis
+                onPress={handleDeleteJob} 
+                color={theme.colors.error} 
+                style={styles.footerButton}
+            >
+                Delete Job
+            </Button>
             <Button 
                 mode="contained" 
                 onPress={() => Alert.alert('TODO', 'Implement Make Inactive')} 
-                color={theme.colors.error} // Use theme color for error/red
-                // style={{ elevation: 0 }} // Remove elevation style - This was removed in previous step
+                color={theme.colors.error} 
+                style={styles.footerButton}
             >
                 Make Inactive
             </Button>
         </View>
+
+        {/* Edit Job Modal */}
+        <AppModal
+          isVisible={isEditModalVisible}
+          onDismiss={() => setIsEditModalVisible(false)}
+          title="Edit Job Info"
+        >
+          <JobSetupForm
+            initialTitle={job.name || ''} // Pass current title
+            // initialTemplateId={job.templateId || null} // Pass template ID if available later
+            submitButtonText="Save"
+            onCancel={() => setIsEditModalVisible(false)}
+            onSubmit={handleJobEditSubmit}
+          />
+        </AppModal>
     </ScrollView>
   );
 };
@@ -324,6 +467,12 @@ const styles = StyleSheet.create({
     borderTopColor: '#eee', // Keep static border color for now
     marginTop: 10, 
     marginBottom: 10,
+    flexDirection: 'row', // Arrange buttons side-by-side
+    justifyContent: 'space-around', // Space out buttons
+  },
+  footerButton: {
+    flex: 1, // Make buttons share space
+    marginHorizontal: 5, // Add some space between buttons
   }
 });
 

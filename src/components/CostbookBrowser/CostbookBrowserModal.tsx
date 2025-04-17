@@ -10,6 +10,7 @@ type CostbookCategory = { category_id: string; name: string; parent_category_id:
 export type SelectedCostbookItem = {
     costbook_item_id: string;
     item_id: string;
+    title?: string | null; // Add title field
     description: string; // Need to fetch this from related 'items' table
     unit: string; // Need to fetch this from related 'items' table
     unit_price: number; // Need to calculate/derive this from costbook_item costs + markup logic
@@ -210,7 +211,8 @@ const CostbookBrowserModal: React.FC<CostbookBrowserModalProps> = ({
       const selectedItemData: SelectedCostbookItem = {
           costbook_item_id: item.costbook_item_id,
           item_id: item.item_id,
-          description: item.items.description ?? item.items.name, // Fallback to name if no description
+          title: item.items.name, // Use item name as title
+          description: item.items.description ?? '', // Use description, fallback to empty string
           unit: item.items.unit,
           unit_price: calculatedUnitPrice, // Placeholder calculation
           // Pass costs if needed

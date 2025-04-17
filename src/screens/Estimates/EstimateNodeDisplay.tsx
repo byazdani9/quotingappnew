@@ -4,18 +4,24 @@ import { EstimateTreeNode, QuoteGroupNode, QuoteItemNode, useEstimateBuilder } f
 
 type EstimateNodeDisplayProps = {
   node: EstimateTreeNode;
-  // Add callbacks for actions later, e.g.:
-  // onEditNode: (node: EstimateTreeNode) => void;
-  // onMoveNode: (nodeId: string, nodeType: 'item' | 'group', direction: 'up' | 'down') => void;
-  // onAddChildNode: (parentNodeId: string | null) => void; // Pass parent ID for context
+  onEditItem: (itemNode: QuoteItemNode) => void; // Add prop for editing items
+  // Add other callbacks as needed
   // onDeleteNode: (nodeId: string, nodeType: 'item' | 'group') => void;
   level?: number; // Optional: for indentation
 };
 
-const EstimateNodeDisplay: React.FC<EstimateNodeDisplayProps> = ({ node, level = 0 }) => {
-  // Get action handlers from context (or pass them as props)
-  // Corrected handler names: handleMoveNode, handleDeleteNode
-  const { handleEditItem, handleAddItem, handleMoveNode, handleDeleteNode, handleAddGroup, handleEditGroup } = useEstimateBuilder();
+// Destructure onEditItem from props here
+const EstimateNodeDisplay: React.FC<EstimateNodeDisplayProps> = ({ node, level = 0, onEditItem }) => {
+  // Get action handlers and currentQuoteId from context (excluding handleEditItem)
+  const {
+    currentQuoteId, // Get quote ID to check if adding is allowed
+    // handleEditItem, // This will be passed via props
+    handleAddItem,
+    handleMoveNode,
+    handleDeleteNode,
+    handleAddGroup,
+    handleEditGroup
+  } = useEstimateBuilder();
 
   const indentationStyle = {
     marginLeft: level * 15, // Indent based on nesting level
@@ -25,15 +31,15 @@ const EstimateNodeDisplay: React.FC<EstimateNodeDisplayProps> = ({ node, level =
     return (
       <View style={[styles.groupContainer, indentationStyle]}>
         <View style={styles.groupHeaderContainer}>
-          <Text style={styles.groupHeader}>{node.name}</Text>
+          <Text style={styles.groupHeader}><Text>{node.name}</Text></Text>
           <View style={styles.groupActionButtons}>
-            {/* Wire up buttons to context handlers */}
-            <Button title="↑" onPress={() => handleMoveNode(node.quote_group_id, 'group', 'up')} />
-            <Button title="↓" onPress={() => handleMoveNode(node.quote_group_id, 'group', 'down')} />
-            <Button title="+ Item" onPress={() => handleAddItem(node.quote_group_id)} />
-            <Button title="+ Group" onPress={() => handleAddGroup(node.quote_group_id)} />
-            <Button title="Edit" onPress={() => handleEditGroup(node)} />
-            <Button title="Del" onPress={() => handleDeleteNode(node.quote_group_id, 'group')} color="red" />
+            {/* Wire up buttons to context handlers, disable add buttons if no quote ID */}
+            <Button title={"↑"} onPress={() => handleMoveNode(node.quote_group_id, 'group', 'up')} />
+            <Button title={"↓"} onPress={() => handleMoveNode(node.quote_group_id, 'group', 'down')} />
+            <Button title={"+ Item"} onPress={() => handleAddItem(node.quote_group_id)} disabled={!currentQuoteId} />
+            <Button title={"+ Group"} onPress={() => handleAddGroup(node.quote_group_id)} disabled={!currentQuoteId} />
+            <Button title={"Edit"} onPress={() => handleEditGroup(node)} />
+            <Button title={"Del"} onPress={() => handleDeleteNode(node.quote_group_id, 'group')} color="red" />
           </View>
         </View>
         {/* Recursively render children */}
@@ -43,40 +49,53 @@ const EstimateNodeDisplay: React.FC<EstimateNodeDisplayProps> = ({ node, level =
               key={childNode.type === 'item' ? childNode.quote_item_id : childNode.quote_group_id}
               node={childNode}
               level={level + 1} // Increase indentation level for children
-              // Pass action callbacks down if needed
+              onEditItem={onEditItem} // Pass onEditItem down recursively
             />
           ))
         ) : (
-          <Text style={[styles.emptyGroupText, { marginLeft: (level + 1) * 15 }]}>No items or sub-groups in this group.</Text>
+          <Text style={[styles.emptyGroupText, { marginLeft: (level + 1) * 15 }]}><Text>No items or sub-groups in this group.</Text></Text>
         )}
       </View>
     );
   }
 
   if (node.type === 'item') {
+    // No need to destructure props again, onEditItem is already available from function arguments
+    // console.log('Rendering item node:', node); // Remove log
+
     return (
       <View style={[styles.rowWithButtons, indentationStyle]}>
-        <TouchableOpacity style={{ flex: 1 }} onPress={() => handleEditItem(node)}>
+        {/* Use the passed-in onEditItem handler */}
+        <TouchableOpacity style={{ flex: 1 }} onPress={() => onEditItem(node)}>
           <View style={styles.itemContainer}>
-            <Text style={styles.itemDescription}>{node.description || ''}</Text>
-            {/* Use calculated values from context/node */}
+            {/* Restore title rendering with proper Text wrapping */}
+            <Text style={styles.itemDescription}>
+              {node.title ? <Text>({node.title}) </Text> : null}
+              <Text>{node.description || ''}</Text>
+            </Text>
+            {/* Restore original itemDetails rendering with proper Text wrapping */}
             <Text style={styles.itemDetails}>
-              <Text>{node.quantity ?? 0}</Text> <Text>{node.unit || ''}</Text> <Text>@ $</Text><Text>{(node.calculated_total_cost_per_unit ?? 0).toFixed(2)}</Text> <Text>= $</Text><Text>{(node.calculated_total_with_markup ?? 0).toFixed(2)}</Text>
+              <Text>{node.quantity ?? 0} </Text>
+              <Text>{node.unit || ''} </Text>
+              <Text>@ $</Text>
+              <Text>{Number(node.calculated_total_cost_per_unit ?? 0).toFixed(2)} </Text>
+              <Text>= $</Text>
+              <Text>{Number(node.calculated_total_with_markup ?? 0).toFixed(2)}</Text>
             </Text>
           </View>
         </TouchableOpacity>
         <View style={styles.reorderButtons}>
           {/* Wire up buttons to context handlers */}
-          <Button title="↑" onPress={() => handleMoveNode(node.quote_item_id, 'item', 'up')} />
-          <Button title="↓" onPress={() => handleMoveNode(node.quote_item_id, 'item', 'down')} />
-           <Button title="Del" onPress={() => handleDeleteNode(node.quote_item_id, 'item')} color="red" />
+          <Button title={"↑"} onPress={() => handleMoveNode(node.quote_item_id, 'item', 'up')} />
+          <Button title={"↓"} onPress={() => handleMoveNode(node.quote_item_id, 'item', 'down')} />
+           <Button title={"Del"} onPress={() => handleDeleteNode(node.quote_item_id, 'item')} color="red" />
         </View>
       </View>
     );
   }
 
   // Fallback for unknown node types (shouldn't happen with TypeScript)
-  return <Text style={{ color: 'red', marginLeft: indentationStyle.marginLeft }}>Unknown Node Type</Text>;
+  return <Text style={{ color: 'red', marginLeft: indentationStyle.marginLeft }}><Text>Unknown Node Type</Text></Text>;
 };
 
 // Use similar styles from EstimateBuilderScreen for consistency

@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity } from 'react-native'; // Added TouchableOpacity
-import { useNavigation } from '@react-navigation/native'; // Added useNavigation
+import { useNavigation, useFocusEffect } from '@react-navigation/native'; // Added useNavigation and useFocusEffect
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'; // Added for type safety
 import { supabase } from '../../lib/supabaseClient'; // Adjust path if needed
-import { EstimateStackParamList } from '../../../App'; // Import the stack param list
+import { EstimateStackParamList, JobStackParamList, AppDrawerParamList } from '../../../App'; // Import all param lists
+import { CompositeNavigationProp } from '@react-navigation/native'; // Import CompositeNavigationProp
+import { DrawerNavigationProp } from '@react-navigation/drawer'; // Import DrawerNavigationProp
 
 // Define a type for the quote data we expect
 // Adjust based on the actual columns you need from the 'quotes' table
@@ -16,10 +18,10 @@ type Quote = {
   // Add other relevant fields from your 'quotes' table
 };
 
-// Define the navigation prop type for this screen within the EstimateStack
-type EstimatesScreenNavigationProp = NativeStackNavigationProp<
-  EstimateStackParamList,
-  'EstimateList' // This screen's route name in the stack
+// Define a composite navigation prop type for nested navigation
+type EstimatesScreenNavigationProp = CompositeNavigationProp<
+  NativeStackNavigationProp<EstimateStackParamList, 'EstimateList'>,
+  DrawerNavigationProp<AppDrawerParamList>
 >;
 
 const EstimatesScreen = () => {
@@ -28,11 +30,8 @@ const EstimatesScreen = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchQuotes();
-  }, []);
-
-  const fetchQuotes = async () => {
+  // Convert fetchQuotes to useCallback for useFocusEffect
+  const fetchQuotes = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -56,23 +55,51 @@ const EstimatesScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Initial fetch on mount
+  useEffect(() => {
+    fetchQuotes();
+  }, [fetchQuotes]);
+
+  // Refresh quotes when the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('EstimatesScreen focused, refreshing quotes');
+      fetchQuotes();
+      return () => {
+        // Cleanup function when screen loses focus (optional)
+      };
+    }, [fetchQuotes])
+  );
 
   const handleAddNewEstimate = () => {
-    // Navigate to the builder screen for a NEW estimate (no ID passed)
-    navigation.navigate('EstimateBuilder', {}); 
+    // Navigate to the Jobs stack first, then to the NewEstimateDetails screen
+    console.log('Navigating to Jobs > NewEstimateDetails screen');
+    
+    // Use ts-ignore to bypass type checking for the nested navigation
+    // @ts-ignore - This is valid navigation syntax for nested navigators
+    navigation.navigate('Jobs', { 
+      screen: 'NewEstimateDetails' 
+    });
   };
 
   const renderItem = ({ item }: { item: Quote }) => (
-    // TODO: Make items pressable to navigate to EstimateBuilder for editing
-    // onPress={() => navigation.navigate('EstimateBuilder', { estimateId: item.estimate_id })}
-    <View style={styles.itemContainer}>
-      {/* <Text style={styles.itemText}>Number: {item.estimate_number}</Text> // Removed - Column does not exist */}
-      <Text style={styles.itemText}>ID: {item.estimate_id}</Text> {/* Displaying ID for now */}
-      <Text style={styles.itemText}>Status: {item.status ?? 'N/A'}</Text>
-      <Text style={styles.itemText}>Total: {item.total?.toFixed(2) ?? 'N/A'}</Text>
-      {/* Add more details or navigation onPress later */}
-    </View>
+    <TouchableOpacity
+      onPress={() => {
+        // @ts-ignore - Accept navigation to nested stack
+        navigation.navigate('Jobs', {
+          screen: 'EstimateBuilder',
+          params: { estimateId: item.estimate_id }
+        });
+      }}
+    >
+      <View style={styles.itemContainer}>
+        <Text style={styles.itemText}>ID: {item.estimate_id}</Text>
+        <Text style={styles.itemText}>Status: {item.status ?? 'N/A'}</Text>
+        <Text style={styles.itemText}>Total: {item.total?.toFixed(2) ?? 'N/A'}</Text>
+      </View>
+    </TouchableOpacity>
   );
 
   if (loading) {
@@ -95,6 +122,27 @@ const EstimatesScreen = () => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Estimates Dashboard</Text>
+      
+      {/* Debug button for direct navigation */}
+      <View style={{ marginBottom: 16, alignItems: 'center' }}>
+        <TouchableOpacity 
+          style={{ 
+            padding: 10, 
+            backgroundColor: '#4a90e2', 
+            borderRadius: 8,
+            marginBottom: 10
+          }}
+          onPress={() => {
+            console.log('Trying direct navigation to JobStack/NewEstimateDetails');
+            // Use the same pattern as our main navigation function
+            // @ts-ignore - Bypass type checking for debugging
+            navigation.navigate('Jobs', { screen: 'NewEstimateDetails' });
+          }}
+        >
+          <Text style={{ color: 'white' }}>DEBUG: Open New Estimate Details</Text>
+        </TouchableOpacity>
+      </View>
+      
       <FlatList
         data={quotes}
         renderItem={renderItem}

@@ -50,6 +50,47 @@ To build a functional quoting application for Android (and potentially iOS later
     ```
     *(Or `npx react-native run-android`)*
 
+## Building & Distributing for Testing (Android APK via Firebase)
+
+This section describes how to create a release APK and distribute it to testers using Firebase App Distribution.
+
+**Prerequisites:**
+
+1.  **Firebase Project:** Ensure you have a Firebase project set up ([console.firebase.google.com](https://console.firebase.google.com/)).
+2.  **Android App Added:** Add an Android app to your Firebase project, providing the package name (`com.quotingappnew`).
+3.  **`google-services.json`:** Download the `google-services.json` file from your Firebase project settings and place it in the `android/app/` directory.
+4.  **Firebase CLI:** Install the Firebase CLI (`npm install -g firebase-tools`) and log in (`firebase login`).
+5.  **App Distribution Enabled:** In the Firebase console, navigate to "App Distribution" (under Release & Monitor), select your Android app, and click "Get started".
+6.  **Gradle Configuration:**
+    *   Add the App Distribution plugin classpath to `android/build.gradle` (within `buildscript { dependencies { ... } }`):
+        ```gradle
+        classpath("com.google.firebase:firebase-appdistribution-gradle:4.2.0")
+        ```
+    *   Apply the App Distribution plugin in `android/app/build.gradle` (near the top):
+        ```gradle
+        apply plugin: "com.google.firebase.appdistribution"
+        ```
+
+**Steps:**
+
+1.  **Build Release APK:** Open your terminal (e.g., Command Prompt on Windows) in the project root directory (`QuotingAppNew`) and run:
+    ```bash
+    cd android && gradlew.bat assembleRelease
+    ```
+    *(On macOS/Linux or Git Bash, use `./gradlew assembleRelease`)*
+    Wait for the "BUILD SUCCESSFUL" message. The APK will be located at `android/app/build/outputs/apk/release/app-release.apk`.
+
+2.  **Distribute via Firebase CLI:** Run the following command in your terminal (replace placeholders):
+    ```bash
+    firebase appdistribution:distribute android/app/build/outputs/apk/release/app-release.apk --app YOUR_FIREBASE_APP_ID --testers "tester1@example.com,tester2@example.com" --groups "your-tester-group-alias"
+    ```
+    *   `YOUR_FIREBASE_APP_ID`: Find this in Firebase Project Settings > General > Your apps > Android app (e.g., `1:1234567890:android:abcdef1234567890`).
+    *   `--testers`: (Optional) Comma-separated list of tester emails.
+    *   `--groups`: (Optional) Comma-separated list of tester group aliases defined in Firebase App Distribution.
+    *(You must provide either `--testers` or `--groups` or both)*
+
+Testers will receive an email invitation to download the build.
+
 ## Project Structure
 
 ```

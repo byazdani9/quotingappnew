@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Button, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Button, ActivityIndicator, Alert, TouchableOpacity } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { JobStackParamList } from '../../../App'; // Adjust path if needed
 // Import context hook and NEW types
@@ -12,8 +12,9 @@ import {
 } from '../../contexts/EstimateBuilderContext';
 import { supabase } from '../../lib/supabaseClient';
 import QuoteItemModal, { QuoteItem } from '../../components/QuoteItem/QuoteItemModal';
-import { TouchableOpacity, Button as NativeButton } from 'react-native';
+import { Button as NativeButton } from 'react-native';
 import EstimateNodeDisplay from './EstimateNodeDisplay'; // Import the new component
+import JobSelectionModal from '../../components/Job/JobSelectionModal';
 
 // Define types for data (can be refined)
 type QuoteDetails = {
@@ -48,6 +49,8 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route, navigation }) => {
     setSelectedCustomer,
     estimateTree, // Use the new tree state
     // setEstimateTree, // Avoid direct setting from screen if possible
+    currentQuoteId, // Get current quote ID
+    setCurrentQuoteId, // Get setter for quote ID
     buildTreeFromFlatData, // Function to build the tree
     addNode, // Placeholder functions from context
     updateNode,
@@ -75,6 +78,56 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route, navigation }) => {
   const [isItemModalVisible, setIsItemModalVisible] = useState(false);
   const [itemToEdit, setItemToEdit] = useState<QuoteItem | null>(null);
   const [targetGroupId, setTargetGroupId] = useState<string | null>(null);
+
+  // Job selection modal state
+  const [jobModalVisible, setJobModalVisible] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<any>(null);
+
+  // Configure the back button in the navigation header
+  useLayoutEffect(() => {
+    // Get the navigation state to determine where we came from
+    const state = navigation.getState();
+    const routes = state.routes;
+    const currentRouteIndex = state.index;
+    
+    // Check if we have a previous route
+    if (currentRouteIndex > 0) {
+      const previousRoute = routes[currentRouteIndex - 1];
+      console.log('Previous route:', previousRoute);
+      
+      // Use the default back button which will show as an arrow
+      navigation.setOptions({
+        headerLeft: undefined, // Let React Navigation use its default back button (arrow)
+      });
+    } else {
+      // If there's no previous route, provide a default back behavior
+      // But still use the arrow style for consistency
+      navigation.setOptions({
+        // Use the default back button style but with custom navigation
+        headerBackTitle: 'Jobs',
+        headerBackVisible: true, // Show the back button
+        headerLeft: () => (
+          <TouchableOpacity 
+            style={{ marginLeft: 10, padding: 5 }}
+            onPress={() => {
+              // Use CommonActions to navigate to the Jobs stack
+              const { CommonActions } = require('@react-navigation/native');
+              navigation.dispatch(
+                CommonActions.navigate({
+                  name: 'Jobs',
+                  params: {
+                    screen: 'JobList'
+                  }
+                })
+              );
+            }}
+          >
+            <Text style={{ fontSize: 24, color: '#007AFF' }}>←</Text>
+          </TouchableOpacity>
+        ),
+      });
+    }
+  }, [navigation]);
 
   // --- Customer Selection ---
   const handleSelectCustomer = () => {
@@ -111,24 +164,25 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route, navigation }) => {
       if (quoteError) throw quoteError;
       if (!quoteData) throw new Error('Quote not found');
       setQuote(quoteData);
+      setCurrentQuoteId(quoteData.estimate_id); // Set the quote ID in context
 
-      // Fetch customer details ONLY if not already in context AND quote has customer_id
-      // This prevents overwriting a newly selected customer from context
-      if (!selectedCustomer && quoteData.customer_id) {
+      // Always fetch customer details from the database based on the quote's customer_id
+      // This ensures we're always using the correct customer for this quote
+      if (quoteData.customer_id) {
         const { data: customerData, error: customerError } = await supabase
           .from('customers')
-          .select('customer_id, first_name, last_name') // Select fields needed for context/display
+          .select('customer_id, first_name, last_name, address, city, postal_code') // Select fields needed for context/display
           .eq('customer_id', quoteData.customer_id)
           .single();
-        if (customerError) throw customerError;
-        // Set the customer in the context if fetched from DB
-        if (customerData) {
-            setSelectedCustomer(customerData);
+        if (customerError) {
+          console.warn("Error fetching customer:", customerError.message);
+          setSelectedCustomer(null);
+        } else if (customerData) {
+          // Always update the context with the customer from the database
+          setSelectedCustomer(customerData);
         }
-      } else if (selectedCustomer && quoteData.customer_id !== selectedCustomer.customer_id) {
-          // TODO: Handle discrepancy? Maybe update quote's customer_id based on context?
-          // For now, context takes precedence if it exists.
-          console.warn("Context customer differs from quote's customer_id");
+      } else {
+        setSelectedCustomer(null); // No customer linked to this quote
       }
 
       // Fetch groups (as flat data)
@@ -157,7 +211,7 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route, navigation }) => {
     } finally {
       setLoading(false);
     }
-  }, [estimateId, selectedCustomer, setSelectedCustomer, buildTreeFromFlatData]); // Update dependency array
+  }, [estimateId, setSelectedCustomer, buildTreeFromFlatData]); // Remove selectedCustomer from dependency array
 
   useEffect(() => {
     if (estimateId) {
@@ -166,10 +220,49 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route, navigation }) => {
       // This is a new estimate (no estimateId).
       // Clear the tree in context for a fresh start
       buildTreeFromFlatData([], []); // Call with empty arrays to clear tree
-      // Context customer is set before navigating here.
-      setLoading(false);
+      // Context customer should be set before navigating here.
+      // Create the quote record in Supabase
+      const createNewQuote = async () => {
+        if (!selectedCustomer) {
+          setError("Cannot create quote: No customer selected.");
+          Alert.alert("Error", "Please select a customer before creating an estimate.");
+          setLoading(false);
+          // Optionally navigate back or disable functionality
+          return;
+        }
+        try {
+          const { data: newQuote, error: insertError } = await supabase
+            .from('quotes')
+            .insert({
+              customer_id: selectedCustomer.customer_id,
+              // Add other default fields for a new quote if necessary
+              // e.g., status: 'Draft', name: jobTitle || 'New Estimate'
+              name: title || 'New Estimate', // Use title state
+              status: 'Draft',
+            })
+            .select('estimate_id') // Select the ID of the newly created quote
+            .single();
+
+          if (insertError) throw insertError;
+          if (!newQuote || !newQuote.estimate_id) throw new Error("Failed to retrieve new quote ID.");
+
+          console.log('New quote created with ID:', newQuote.estimate_id);
+          setCurrentQuoteId(newQuote.estimate_id); // Set the new quote ID in context
+          // Update route params or screen state if needed to reflect the new ID?
+          // For now, context holds the ID.
+          setQuote({ estimate_id: newQuote.estimate_id, customer_id: selectedCustomer.customer_id, subtotal: 0, overhead: 0, profit: 0, contingency: 0, discount: 0, tax_amount: 0, total: 0, status: 'Draft' }); // Set basic quote details locally
+
+        } catch (e: any) {
+          setError(`Failed to create quote: ${e.message}`);
+          Alert.alert('Error', `Failed to create quote: ${e.message}`);
+        } finally {
+          setLoading(false);
+        }
+      };
+      createNewQuote();
     }
-  }, [estimateId, fetchData, buildTreeFromFlatData]); // Update dependency array
+  // Remove selectedCustomer from dependency array to prevent infinite loop
+  }, [estimateId, fetchData, buildTreeFromFlatData, setCurrentQuoteId, title]);
 
 
   // --- Old structuring logic removed ---
@@ -219,33 +312,121 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route, navigation }) => {
   // Update handleItemModalSave to use context functions
   const handleItemModalSave = (savedItemData: QuoteItem) => { // Modal returns flat QuoteItem
     console.log('handleItemModalSave called (screen level)', { savedItemData });
-    // Convert flat data back to node for context update/add
-    const savedNode: QuoteItemNode = { ...savedItemData, type: 'item' };
+
+    // Sanitize the data returned from Supabase before adding to the tree state
+    const sanitizedData: QuoteItem = {
+        ...savedItemData,
+        title: savedItemData.title ?? '', // Ensure title is string or empty string
+        description: savedItemData.description ?? '', // Ensure description is string or empty string
+        unit: savedItemData.unit ?? '', // Ensure unit is string or empty string
+        // Add other fields that might be null and rendered as text if necessary
+    };
+
+    // Convert sanitized data back to node for context update/add
+    // Use sanitizedData here instead of savedItemData
+    const savedNode: QuoteItemNode = { ...sanitizedData, type: 'item' };
 
     if (itemToEdit) {
       // We were editing, call updateNode
+      // console.log('EstimateBuilderScreen: Updating node:', savedNode); // Remove log
       updateNode(savedNode);
     } else {
       // We were adding, call addNode
       // targetGroupId was set when opening the modal for adding
+      // console.log('EstimateBuilderScreen: Adding node:', savedNode, 'to group:', targetGroupId); // Remove log
       addNode(savedNode, targetGroupId);
     }
     // Modal closes itself on successful save now
   };
   const handleGeneratePdf = async () => { /* ... */ }; // Keep as is for now
   const handleConvertToJob = async () => { /* ... */ }; // Keep as is for now
+  
+  const handleDeleteEstimate = async () => {
+    if (!currentQuoteId) {
+      Alert.alert('Error', 'No estimate to delete.');
+      return;
+    }
+
+    Alert.alert(
+      "Confirm Deletion",
+      "Are you sure you want to delete this estimate? This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive", 
+          onPress: async () => {
+            try {
+              setLoading(true); // Show loading indicator during delete
+              
+              // First, delete all quote items
+              const { error: itemsDeleteError } = await supabase
+                .from('quote_items')
+                .delete()
+                .eq('quote_id', currentQuoteId);
+              
+              if (itemsDeleteError) throw itemsDeleteError;
+              
+              // Then, delete all quote groups
+              const { error: groupsDeleteError } = await supabase
+                .from('quote_groups')
+                .delete()
+                .eq('quote_id', currentQuoteId);
+              
+              if (groupsDeleteError) throw groupsDeleteError;
+              
+              // Finally, delete the quote itself
+              const { error: quoteDeleteError } = await supabase
+                .from('quotes')
+                .delete()
+                .eq('estimate_id', currentQuoteId);
+              
+              if (quoteDeleteError) throw quoteDeleteError;
+
+              Alert.alert("Success", "Estimate deleted successfully.");
+              
+              // Check if we have a customer to navigate back to
+              // Use the customer_id from the quote object, not the selectedCustomer from context
+              if (quote && quote.customer_id) {
+                // Use CommonActions to navigate back to the customer detail screen
+                const { CommonActions } = require('@react-navigation/native');
+                navigation.dispatch(
+                  CommonActions.navigate({
+                    name: 'Customers',
+                    params: {
+                      screen: 'CustomerDetail',
+                      params: { customerId: quote.customer_id }
+                    }
+                  })
+                );
+              } else {
+                // Default fallback: just go back one screen
+                navigation.goBack();
+              }
+
+            } catch (e: any) {
+              setError(e.message); // Set error state
+              Alert.alert('Error Deleting Estimate', e.message);
+            } finally {
+              setLoading(false); // Hide loading indicator
+            }
+          } 
+        },
+      ]
+    );
+  };
   // --- End Other handlers ---
 
 
   // Simplified Loading/Error/Not Found States
   if (loading) {
-     return <View style={styles.centered}><Text>Loading...</Text></View>; // Simpler loading
+     return <View style={styles.centered}><Text><Text>Loading...</Text></Text></View>; // Simpler loading
   }
   if (error) {
-    return <View style={styles.centered}><Text>Error loading data.</Text></View>; // Simpler error
+    return <View style={styles.centered}><Text><Text>Error loading data.</Text></Text></View>; // Simpler error
   }
   if (estimateId && !quote) { // Simplified not found check
-     return <View style={styles.centered}><Text>Quote not found.</Text></View>;
+     return <View style={styles.centered}><Text><Text>Quote not found.</Text></Text></View>;
   }
 
   // Template logic useEffect moved above the early returns
@@ -259,16 +440,37 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route, navigation }) => {
             {estimateId ? `Quote #: ${quote?.estimate_id}` : 'New Estimate'}
           </Text>
           <Text style={styles.jobTitle}>{title || 'Untitled Job'}</Text>
+          {/* Job selection */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}>
+            <Text style={{ fontWeight: 'bold', marginRight: 8 }}>Job:</Text>
+            {selectedJob ? (
+              <Text style={{ flex: 1 }}>
+                {selectedJob.name || 'Untitled'} {selectedJob.number ? `(#${selectedJob.number})` : ''}
+                {selectedJob.status ? ` - ${selectedJob.status}` : ''}
+              </Text>
+            ) : (
+              <Text style={{ flex: 1, color: '#888' }}>No job selected</Text>
+            )}
+            <NativeButton title="Select Job" onPress={() => setJobModalVisible(true)} />
+          </View>
           <View style={styles.customerHeader}>
-            {/* Use selectedCustomer from context for display, explicit Text wrapping */}
+              {/* Use selectedCustomer from context for display, explicit Text wrapping */}
             <View style={styles.customerInfo}>
               <Text style={styles.customerNameText}>
-                <Text>Customer: </Text><Text>{selectedCustomer ? `${selectedCustomer.first_name ?? ''} ${selectedCustomer.last_name ?? ''}`.trim() : 'N/A'}</Text>
+                <Text>Customer: </Text>
+                <Text>{selectedCustomer ? 
+                  (selectedCustomer.first_name || '') + ' ' + (selectedCustomer.last_name || '') : 
+                  'N/A'}</Text>
               </Text>
               {/* Use ternary operator for conditional rendering */}
               {selectedCustomer ? (
                 <Text style={styles.customerAddressText}>
-                  {`${selectedCustomer.address || ''}${selectedCustomer.address && (selectedCustomer.city || selectedCustomer.postal_code) ? ', ' : ''}${selectedCustomer.city || ''} ${selectedCustomer.postal_code || ''}`.trim()}
+                  <Text>{selectedCustomer.address || ''}</Text>
+                  {selectedCustomer.address && (selectedCustomer.city || selectedCustomer.postal_code) ? 
+                    <Text>, </Text> : 
+                    null}
+                  <Text>{selectedCustomer.city || ''}</Text>
+                  <Text> {selectedCustomer.postal_code || ''}</Text>
                 </Text>
               ) : null}
             </View>
@@ -289,27 +491,30 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route, navigation }) => {
              The component will take the estimateTree from context and render nodes.
              Example structure:
              {estimateTree.length === 0 ? (
-               <Text style={styles.emptyText}>No items or groups added yet.</Text>
+               <Text style={styles.emptyText}><Text>No items or groups added yet.</Text></Text>
              ) : (
                estimateTree.map(node => <EstimateNodeDisplay key={node.type === 'item' ? node.quote_item_id : node.quote_group_id} node={node} />)
               )}
             */}
            {/* Replace placeholder with actual recursive rendering */}
            {estimateTree.length === 0 ? (
-               <Text style={styles.emptyText}>No items or groups added yet.</Text>
+               <Text style={styles.emptyText}><Text>No items or groups added yet.</Text></Text>
              ) : (
                estimateTree.map(node => (
                  <EstimateNodeDisplay
                    key={node.type === 'item' ? node.quote_item_id : node.quote_group_id}
                    node={node}
                    level={0} // Start top-level nodes at level 0
-                   // Pass handlers if needed, though component uses context now
+                   onEditItem={handleEditItem} // Pass the screen's handler down
                  />
                ))
              )}
-           {/* Button to add top-level group */}
-           <Button title="+ Add Top-Level Group" onPress={() => handleAddGroup(null)} />
-           {/* Add Item button might need context (e.g., add to root group or specific group) - Removed for now */}
+           {/* Buttons to add top-level items/groups */}
+           <View style={styles.topLevelAddButtons}>
+             {/* Disable buttons if currentQuoteId is null */}
+             <Button title="+ Add Top-Level Group" onPress={() => handleAddGroup(null)} disabled={!currentQuoteId} />
+             <Button title="+ Add Item" onPress={() => handleAddItem(null)} disabled={!currentQuoteId} />
+           </View>
          </View>
 
          {/* Action Buttons - Keep Add Group (now calls context), others might change */}
@@ -319,6 +524,7 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route, navigation }) => {
             {/* Note: The "+ Add Top-Level Group" button inside itemsSection already calls handleAddGroup(null) */}
             <Button title="Generate PDF" onPress={handleGeneratePdf} disabled={loading} />
             <Button title="Convert to Job" onPress={handleConvertToJob} disabled={loading} />
+            <Button title="Delete Estimate" onPress={handleDeleteEstimate} color="red" disabled={loading} />
         </View>
 
         {/* Totals Summary Section */}
@@ -377,6 +583,15 @@ const EstimateBuilderScreen: React.FC<Props> = ({ route, navigation }) => {
         targetGroupId={targetGroupId} // Pass the target group ID for adding
       />
       {/* Customer Modal removed */}
+      {/* Job Selection Modal */}
+      <JobSelectionModal
+        visible={jobModalVisible}
+        onClose={() => setJobModalVisible(false)}
+        onSelect={job => {
+          setSelectedJob(job);
+          setJobModalVisible(false);
+        }}
+      />
     </View>
   );
 };
@@ -429,7 +644,15 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: 16, fontWeight: '500', },
   grandTotalRow: { borderTopWidth: 1, borderTopColor: '#ccc', marginTop: 10, paddingTop: 10, },
   grandTotalLabel: { fontWeight: 'bold', color: '#000', },
-  grandTotalValue: { fontWeight: 'bold', color: '#000', }
+  grandTotalValue: { fontWeight: 'bold', color: '#000', },
+  topLevelAddButtons: { // Style for the container of top-level add buttons
+    flexDirection: 'row',
+    justifyContent: 'space-around', // Space out buttons
+    marginTop: 15,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  }
 });
 
 export default EstimateBuilderScreen;

@@ -88,7 +88,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.label}>First Name *</Text>
+      <Text style={styles.label}><Text>First Name *</Text></Text>
       <TextInput
         style={styles.input}
         value={formData.first_name}
@@ -97,7 +97,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
         autoCapitalize="words"
       />
 
-      <Text style={styles.label}>Last Name *</Text>
+      <Text style={styles.label}><Text>Last Name *</Text></Text>
       <TextInput
         style={styles.input}
         value={formData.last_name}
@@ -106,7 +106,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
         autoCapitalize="words"
       />
 
-      <Text style={styles.label}>Company Name</Text>
+      <Text style={styles.label}><Text>Company Name</Text></Text>
       <TextInput
         style={styles.input}
         value={formData.company_name ?? ''}
@@ -115,7 +115,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
         autoCapitalize="words"
       />
 
-      <Text style={styles.label}>Phone</Text>
+      <Text style={styles.label}><Text>Phone</Text></Text>
       <TextInput
         style={styles.input}
         value={formData.phone ?? ''}
@@ -124,7 +124,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
         keyboardType="phone-pad"
       />
 
-      <Text style={styles.label}>Email</Text>
+      <Text style={styles.label}><Text>Email</Text></Text>
       <TextInput
         style={styles.input}
         value={formData.email ?? ''}
@@ -134,7 +134,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
         autoCapitalize="none"
       />
 
-      <Text style={styles.label}>Address (Street)</Text>
+      <Text style={styles.label}><Text>Address (Street)</Text></Text>
       <TextInput
         style={styles.input}
         value={formData.address ?? ''}
@@ -143,7 +143,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
         autoCapitalize="words"
       />
 
-      <Text style={styles.label}>City</Text>
+      <Text style={styles.label}><Text>City</Text></Text>
       <TextInput
         style={styles.input}
         value={formData.city ?? ''}
@@ -154,7 +154,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
 
       {/* State / Province Input Removed */}
 
-      <Text style={styles.label}>Postal / Zip Code</Text>
+      <Text style={styles.label}><Text>Postal / Zip Code</Text></Text>
       <TextInput
         style={styles.input}
         value={formData.postal_code ?? ''}
@@ -163,7 +163,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({
         autoCapitalize="characters"
       />
 
-      <Text style={styles.label}>Notes</Text>
+      <Text style={styles.label}><Text>Notes</Text></Text>
       <TextInput
         style={[styles.input, styles.textArea]}
         value={formData.notes ?? ''}

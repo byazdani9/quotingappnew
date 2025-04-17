@@ -26,7 +26,7 @@ import CustomersScreen from './src/screens/Customers/CustomersScreen'; // Import
 // Import the CustomerModalScreen with correct path
 import CustomerModalScreen from './src/screens/Customers/CustomerModalScreen'; // Correct path
 import CustomerSelectionScreen from './src/screens/Customers/CustomerSelectionScreen'; // Import the selection screen
-
+import CustomerDetailScreen from './src/screens/Customers/CustomerDetailScreen'; // Import Customer Detail Screen
 
 // Define types for the navigation stack parameters
 export type AuthStackParamList = {
@@ -43,15 +43,22 @@ export type EstimateStackParamList = {
 // Define types for the nested Job Stack
 export type JobStackParamList = {
   JobList: undefined; // Route for JobsScreen
-  JobDetail: { jobId?: string }; // Route for JobDetailScreen, make jobId optional for creation
+  JobDetail: { jobId?: string, estimateId?: string }; // Route for JobDetailScreen, make jobId optional for creation, add estimateId
   ChangeOrders: { jobId: string }; // Add ChangeOrders route, requires jobId
-  CustomerModalScreen: { customerToEdit?: any, onSaveSuccessRoute?: string }; // Screen for Customer Modal form
+  CustomerModalScreen: { customerToEdit?: any, onSaveSuccessRoute?: string, jobTitle?: string, templateId?: string }; // Screen for Customer Modal form, now supports jobTitle/templateId
   // Update CustomerSelectionScreen to accept jobTitle and templateId
   CustomerSelectionScreen: { jobTitle: string; templateId?: string }; 
   EstimateBuilder: { estimateId?: string, jobId?: string, selectedCustomer?: any, jobTitle?: string, templateId?: string }; // Updated params
   NewEstimateDetails: undefined; // New screen for job title and template selection
 };
 
+// Define types for the nested Customer Stack
+export type CustomerStackParamList = {
+  CustomerList: undefined;
+  CustomerDetail: { customerId: string };
+  // Ensure CustomerModalScreen is defined here for the stack
+  CustomerModalScreen: { customerToEdit?: any, onSaveSuccessRoute?: string, jobTitle?: string, templateId?: string };
+};
 
 import { NavigatorScreenParams } from '@react-navigation/native'; // Import NavigatorScreenParams
 
@@ -61,9 +68,10 @@ export type AppDrawerParamList = {
   Dashboard: undefined;
   // Estimates: undefined; // Removed from drawer
   // Update Jobs to accept JobStackParamList parameters
-  Jobs: NavigatorScreenParams<JobStackParamList> | undefined; 
+  Jobs: NavigatorScreenParams<JobStackParamList> | undefined;
   Costbooks: undefined;
-  Customers: undefined; // Add Customers to drawer params
+  // Update Customers to use CustomerStackParamList
+  Customers: NavigatorScreenParams<CustomerStackParamList> | undefined;
   Settings: undefined;
   // EstimateBuilder: { estimateId?: string }; // REMOVE EstimateBuilder from Drawer params
   // Add other main app screens here
@@ -72,6 +80,7 @@ export type AppDrawerParamList = {
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const EstimateStackNav = createNativeStackNavigator<EstimateStackParamList>(); // Uncomment - Still needed by EstimateStackNavigator
 const JobStackNav = createNativeStackNavigator<JobStackParamList>(); // Job Stack Navigator
+const CustomerStackNav = createNativeStackNavigator<CustomerStackParamList>(); // Customer Stack Navigator
 const Drawer = createDrawerNavigator<AppDrawerParamList>(); // Create Drawer Navigator instance
 
 // Stack Navigator for Estimate related screens (Might still be needed if navigated to from elsewhere)
@@ -86,35 +95,50 @@ function EstimateStackNavigator() {
   );
 }
 
+// Stack Navigator for Customer related screens
+function CustomerStackNavigator() {
+  return (
+    <CustomerStackNav.Navigator>
+      {/* Main Customer List */}
+      <CustomerStackNav.Screen
+        name="CustomerList"
+        component={CustomersScreen}
+        options={{ title: 'Customers' }} // Set header title for the list
+      />
+      {/* Customer Detail Screen */}
+      <CustomerStackNav.Screen
+        name="CustomerDetail"
+        component={CustomerDetailScreen}
+        // Title will be set dynamically in the component
+      />
+      {/* Modal for Adding/Editing Customers */}
+      <CustomerStackNav.Group screenOptions={{ presentation: 'modal', headerShown: false }}>
+        <CustomerStackNav.Screen name="CustomerModalScreen" component={CustomerModalScreen} />
+      </CustomerStackNav.Group>
+    </CustomerStackNav.Navigator>
+  );
+}
 // Stack Navigator for Job related screens
 function JobStackNavigator() {
   return (
-    // REMOVED Provider wrapping the entire navigator
-    // <EstimateBuilderProvider> // Keep provider removed from wrapping the whole navigator
+    // Wrap the navigator with the context provider - REVERTED
+    <EstimateBuilderProvider>
       <JobStackNav.Navigator>
-        {/* Screens NOT needing the context */}
-        <JobStackNav.Screen name="JobList" component={JobsScreen} options={{ headerShown: false }}/>
-        <JobStackNav.Screen name="JobDetail" component={JobDetailScreen} options={{ headerShown: false }}/>
-        <JobStackNav.Screen name="ChangeOrders" component={ChangeOrdersScreen} options={{ headerShown: false }}/>
-        <JobStackNav.Screen name="NewEstimateDetails" component={NewEstimateDetailsScreen} options={{ headerShown: false }}/>
-
-        {/* Screens needing the context - Wrap these in a Group wrapped by the Provider */}
-        <JobStackNav.Group screenOptions={{ headerShown: false }}>
-           {/* Wrap the Group content with the Provider */}
-           <JobStackNav.Screen name="CustomerSelectionScreen">
-             {(props) => (
-               <EstimateBuilderProvider>
-                 <CustomerSelectionScreen {...props} />
-               </EstimateBuilderProvider>
-             )}
-           </JobStackNav.Screen>
-           <JobStackNav.Screen name="EstimateBuilder">
-             {(props) => (
-               <EstimateBuilderProvider>
-                 <EstimateBuilderScreen {...props} />
-               </EstimateBuilderProvider>
-             )}
-           </JobStackNav.Screen>
+        {/* Removed headerShown: false from screenOptions to show default header */}
+        <JobStackNav.Group>
+          <JobStackNav.Screen
+            name="JobList"
+            component={JobsScreen}
+            options={{ title: "Jobs Dashboard" }}
+          />
+          <JobStackNav.Screen name="JobDetail" component={JobDetailScreen} />
+          <JobStackNav.Screen name="ChangeOrders" component={ChangeOrdersScreen} />
+          {/* Add CustomerSelectionScreen as a regular screen within this stack */}
+          <JobStackNav.Screen name="CustomerSelectionScreen" component={CustomerSelectionScreen} />
+          {/* Add EstimateBuilderScreen to this stack - Provider now wraps navigator */}
+          <JobStackNav.Screen name="EstimateBuilder" component={EstimateBuilderScreen} />
+          {/* Add new screen for job title and template selection */}
+          <JobStackNav.Screen name="NewEstimateDetails" component={NewEstimateDetailsScreen} />
         </JobStackNav.Group>
         {/* Define Modal Screens in a separate group */}
         <JobStackNav.Group screenOptions={{ presentation: 'modal', headerShown: false }}>
@@ -122,7 +146,7 @@ function JobStackNavigator() {
           {/* Add other modal screens for this stack here if needed */}
         </JobStackNav.Group>
       </JobStackNav.Navigator>
-    // </EstimateBuilderProvider> // REMOVED Provider closing tag
+    </EstimateBuilderProvider> // REVERTED Provider closing tag
   );
 }
 
@@ -134,7 +158,8 @@ function MainAppDrawer() {
       <Drawer.Screen name="Dashboard" component={DashboardScreen} />
       {/* Estimates screen removed from drawer - accessed via Jobs */}
       <Drawer.Screen name="Jobs" component={JobStackNavigator} />
-      <Drawer.Screen name="Customers" component={CustomersScreen} />
+      {/* Replace direct CustomersScreen with CustomerStackNavigator */}
+      <Drawer.Screen name="Customers" component={CustomerStackNavigator} />
       <Drawer.Screen name="Costbooks" component={CostbooksScreen} />
       <Drawer.Screen name="Settings" component={SettingsScreen} />
       {/* EstimateBuilder screen removed from Drawer */}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'; // Import useCallback
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, TouchableOpacity } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../lib/supabaseClient';
 import { JobStackParamList } from '../../../App';
@@ -145,6 +145,17 @@ const JobsScreen = () => {
     fetchJobs();
   }, [fetchJobs]); // fetchJobs is now stable due to useCallback
 
+  // Refresh jobs when the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('JobsScreen focused, refreshing jobs');
+      fetchJobs();
+      return () => {
+        // Cleanup function when screen loses focus (optional)
+      };
+    }, [fetchJobs])
+  );
+
   const handleNavigateToDetail = (jobId: string) => {
     navigation.navigate('JobDetail', { jobId: jobId });
   };
@@ -174,7 +185,9 @@ const JobsScreen = () => {
   const renderItem = ({ item }: { item: Job }) => {
     // Access customer data directly as an object
     const customerData = item.customer; 
-    const customerName = customerData ? `${customerData.first_name || ''} ${customerData.last_name || ''}`.trim() : 'No Customer';
+    const customerName = customerData ? 
+      (customerData.first_name || '') + (customerData.first_name && customerData.last_name ? ' ' : '') + (customerData.last_name || '') : 
+      'No Customer';
     const customerAddress = customerData ? [customerData.address, customerData.city, customerData.postal_code].filter(Boolean).join(', ') : 'No Address';
     const jobIdentifier = item.name || `Job #${item.number || item.job_id.substring(0, 8)}`; // Use name, number, or partial ID
     const jobAmount = item.amount?.toLocaleString(undefined, { style: 'currency', currency: 'CAD' }) ?? '$0.00'; // Format as currency
@@ -185,17 +198,17 @@ const JobsScreen = () => {
           <View style={styles.itemRow}>
             {/* Left Column (Now Customer Info + Amount) */}
             <View style={styles.leftColumn}>
-              <Text style={styles.customerNameLg}>{customerName}</Text> 
-              <Text style={styles.customerAddressLg}>{customerAddress}</Text>
-              <Text style={styles.jobAmountLg}>{jobAmount}</Text>
+              <Text style={styles.customerNameLg}><Text>{customerName}</Text></Text> 
+              <Text style={styles.customerAddressLg}><Text>{customerAddress}</Text></Text>
+              <Text style={styles.jobAmountLg}><Text>{jobAmount}</Text></Text>
             </View>
             {/* Right Column (Now Project Name + Status) */}
             <View style={styles.rightColumn}>
-              <Text style={styles.jobIdentifierSm}>{jobIdentifier}</Text> 
-              <Text style={styles.jobStatusSm}>{item.status ?? 'N/A'}</Text>
+              <Text style={styles.jobIdentifierSm}><Text>{jobIdentifier}</Text></Text> 
+              <Text style={styles.jobStatusSm}><Text>{item.status ?? 'N/A'}</Text></Text>
             </View>
             {/* Arrow Icon Placeholder */}
-            <Text style={styles.arrow}>{'>'}</Text> 
+            <Text style={styles.arrow}><Text>{'>'}</Text></Text> 
           </View>
         </View>
       </TouchableOpacity>
@@ -213,7 +226,10 @@ const JobsScreen = () => {
   if (error) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>Error: {error}</Text>
+        <Text style={styles.errorText}>
+          <Text>Error: </Text>
+          <Text>{error}</Text>
+        </Text>
         {/* Optionally add a retry button */}
       </View>
     );
@@ -221,8 +237,6 @@ const JobsScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Text style={styles.title}>Jobs Dashboard</Text>
-      
       {/* Search Input */}
       <TextInput
         label="Search Jobs..."
@@ -238,12 +252,12 @@ const JobsScreen = () => {
         data={jobs}
         renderItem={renderItem}
         keyExtractor={(item) => item.job_id}
-        ListEmptyComponent={<Text style={styles.emptyText}>No jobs found.</Text>}
+        ListEmptyComponent={<Text style={styles.emptyText}><Text>No jobs found.</Text></Text>}
         contentContainerStyle={{ paddingBottom: 60 }} // Avoid overlap with button
       />
       {/* Add New Estimate Button */}
       <TouchableOpacity style={styles.addButton} onPress={handleAddNewEstimate}>
-        <Text style={styles.addButtonText}>+ Add New Estimate</Text>
+        <Text style={styles.addButtonText}><Text>+ Add New Estimate</Text></Text>
       </TouchableOpacity>
 
       {/* Job Setup Modal */}

@@ -1,8 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, Button, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert, Button, TouchableOpacity, TextInput } from 'react-native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native'; // Import useNavigation and useFocusEffect
+import { NativeStackNavigationProp } from '@react-navigation/native-stack'; // Import navigation prop type
 import { supabase } from '../../lib/supabaseClient'; // Adjust path if needed
-import CustomerModal from '../../components/Customer/CustomerModal'; // Import the modal
+// Import the renamed content component - NOT USED DIRECTLY HERE ANYMORE
+// import CustomerModalContent from '../../components/Customer/CustomerModal';
 import { CustomerFormData } from '../../components/Customer/CustomerForm'; // Import form data type
+// Import the ParamList type from the detail screen (or define it centrally)
+import { CustomerStackParamList } from './CustomerDetailScreen'; // Assuming this is defined correctly
 
 // Define a type for the full customer data including ID
 type Customer = CustomerFormData & {
@@ -10,15 +15,26 @@ type Customer = CustomerFormData & {
     // Include other fields if needed
 };
 
+// Define the navigation prop type using the stack param list
+type CustomersScreenNavigationProp = NativeStackNavigationProp<
+  CustomerStackParamList,
+  'CustomerList' // This screen's name in the stack
+>;
+
 const CustomersScreen = () => {
+  const navigation = useNavigation<CustomersScreenNavigationProp>(); // Get navigation object
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  // Remove modal visibility state, navigation stack handles it
+  // const [isModalVisible, setIsModalVisible] = useState(false);
+  // Remove selectedCustomer state for modal
+  // const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
   const fetchCustomers = useCallback(async () => {
-    setLoading(true);
+    // Don't set loading to true here if it's just a refresh
+    // setLoading(true);
     setError(null);
     try {
       const { data, error: fetchError } = await supabase
@@ -34,56 +50,54 @@ const CustomersScreen = () => {
       setError(e.message);
       Alert.alert('Error fetching customers', e.message);
     } finally {
-      setLoading(false);
+      setLoading(false); // Set loading false after fetch completes or fails
     }
   }, []);
 
-  useEffect(() => {
-    fetchCustomers();
-  }, [fetchCustomers]);
+  // Use useFocusEffect to refetch data when the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true); // Set loading true when focusing
+      fetchCustomers();
+    }, [fetchCustomers])
+  );
 
+  // Update handleAddCustomer to navigate to the modal screen
   const handleAddCustomer = () => {
-    setSelectedCustomer(null); // Ensure we are adding, not editing
-    setIsModalVisible(true);
+    // Navigate to the modal screen in the stack, no params needed for adding
+    // Ensure 'CustomerModalScreen' is correctly defined in your CustomerStackNav in App.tsx
+    navigation.navigate('CustomerModalScreen', {});
   };
 
-  const handleEditCustomer = (customer: Customer) => {
-    setSelectedCustomer(customer);
-    setIsModalVisible(true);
+  // Keep handleNavigateToDetail as is
+  const handleNavigateToDetail = (customer: Customer) => {
+    navigation.navigate('CustomerDetail', { customerId: customer.customer_id });
   };
 
-  const handleModalClose = () => {
-    setIsModalVisible(false);
-    setSelectedCustomer(null); // Clear selected customer on close
-  };
-
-  const handleModalSave = (savedCustomer: Customer) => {
-     // Refresh the list after saving
-     // Option 1: Simple refetch
-     fetchCustomers();
-
-     // Option 2: Optimistic update (more complex)
-     // if (selectedCustomer) {
-     //   // Update existing customer in state
-     //   setCustomers(prev => prev.map(c => c.customer_id === savedCustomer.customer_id ? savedCustomer : c));
-     // } else {
-     //   // Add new customer to state
-     //   setCustomers(prev => [savedCustomer, ...prev]);
-     // }
-  };
+  // Remove handleModalClose and handleModalSave, they belong in CustomerModalScreen now
+  /*
+  const handleModalClose = () => { ... };
+  const handleModalSave = (savedCustomer: Customer) => { ... };
+  */
 
 
   const renderItem = ({ item }: { item: Customer }) => (
-    <TouchableOpacity onPress={() => handleEditCustomer(item)}>
+    // Update onPress to call handleNavigateToDetail
+    <TouchableOpacity onPress={() => handleNavigateToDetail(item)}>
       <View style={styles.itemContainer}>
-        <Text style={styles.itemText}>{item.first_name} {item.last_name}</Text>
-        {item.company_name && <Text style={styles.itemSubText}>{item.company_name}</Text>}
+        <Text style={styles.itemText}>
+          <Text>{item.first_name || ''}</Text>
+          {item.first_name && item.last_name ? <Text> </Text> : null}
+          <Text>{item.last_name || ''}</Text>
+        </Text>
+        {item.company_name && <Text style={styles.itemSubText}><Text>{item.company_name}</Text></Text>}
         {/* Add more details like phone/email if needed */}
       </View>
     </TouchableOpacity>
   );
 
-  if (loading && customers.length === 0) { // Show loading only on initial load
+  // Show loading only on initial load (when customers array is empty)
+  if (loading && customers.length === 0) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" />
@@ -94,32 +108,53 @@ const CustomersScreen = () => {
   if (error) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>Error: {error}</Text>
-        <Button title="Retry" onPress={fetchCustomers} />
+        <Text style={styles.errorText}>
+          <Text>Error: </Text>
+          <Text>{error}</Text>
+        </Text>
+        <Button title="Retry" onPress={() => { setLoading(true); fetchCustomers(); }} />
       </View>
     );
   }
 
+  // Filter customers based on search term (case-insensitive)
+  const filteredCustomers = customers.filter((customer) => {
+    const fullName = `${customer.first_name || ''} ${customer.last_name || ''}`.toLowerCase();
+    const company = (customer.company_name || '').toLowerCase();
+    const term = searchTerm.toLowerCase();
+    return fullName.includes(term) || company.includes(term);
+  });
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
-         <Text style={styles.title}>Customers</Text>
+         <View style={{ flex: 1 }} />
          <Button title="Add New" onPress={handleAddCustomer} />
       </View>
+      <TextInput
+        style={styles.searchInputStandalone}
+        placeholder="Search customers..."
+        value={searchTerm}
+        onChangeText={setSearchTerm}
+        clearButtonMode="while-editing"
+      />
       <FlatList
-        data={customers}
+        data={filteredCustomers}
         renderItem={renderItem}
         keyExtractor={(item) => item.customer_id}
-        ListEmptyComponent={<Text style={styles.emptyText}>No customers found.</Text>}
-        refreshing={loading} // Show refresh indicator while fetching
-        onRefresh={fetchCustomers} // Allow pull-to-refresh
+        ListEmptyComponent={<Text style={styles.emptyText}><Text>No customers found.</Text></Text>}
+        refreshing={loading} // Show refresh indicator while fetching via pull-to-refresh
+        onRefresh={() => { setLoading(true); fetchCustomers(); }} // Allow pull-to-refresh
       />
+      {/* Remove the direct rendering of CustomerModal */}
+      {/* 
       <CustomerModal
         isVisible={isModalVisible}
         onClose={handleModalClose}
-        customerToEdit={selectedCustomer}
+        customerToEdit={null} // Modal is now only for adding from this screen
         onSave={handleModalSave}
       />
+      */}
     </View>
   );
 };
@@ -158,6 +193,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'gray',
     marginTop: 2,
+  },
+  searchInputStandalone: {
+    height: 40,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#f0f0f0',
+    fontSize: 16,
+    marginBottom: 10,
+    marginHorizontal: 0,
   },
   emptyText: {
     textAlign: 'center',

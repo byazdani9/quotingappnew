@@ -55,14 +55,14 @@ const DashboardScreen = () => {
 
   return (
     <ScrollView style={[styles.scrollView, { backgroundColor: theme.colors.background }]}>
-      <View style={styles.container}>
-        {/* Logo */}
-        <Image 
-          source={require('../../assets/images/logo.png')} 
-          style={styles.logo}
-          resizeMode="contain" 
-        />
+      {/* Logo */}
+      <Image 
+        source={require('../../assets/images/logo.png')} 
+        style={styles.logo}
+        resizeMode="contain" 
+      />
 
+      <View style={styles.container}>
         {/* Job Status Summary */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Job Status</Text>
@@ -112,9 +112,8 @@ const styles = StyleSheet.create({
     padding: 15,
   },
   logo: {
-    // width: '80%', // Remove width to rely on height + resizeMode
-    height: 176, // Increased height by 10% from 160
-    alignSelf: 'center',
+    height: 40, // 50% of original, larger than tiny version
+    alignSelf: 'center', // Align logo to the left
     marginTop: 10, // Add some top margin
     marginBottom: 10, // Add back smaller bottom margin
   },
