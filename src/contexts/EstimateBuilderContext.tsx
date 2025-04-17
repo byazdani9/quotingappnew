@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect, useMemo, useCallback } from 'react'; // Import useCallback
+import { Alert } from 'react-native'; // Import Alert
 import { QuoteItem } from '../components/QuoteItem/QuoteItemModal'; // Keep original QuoteItem type for data structure
 
 // --- Define Hierarchical Node Types ---
@@ -58,6 +59,8 @@ type CustomerContextType = {
 interface EstimateBuilderContextProps {
   selectedCustomer: CustomerContextType | null;
   setSelectedCustomer: (customer: CustomerContextType | null) => void;
+  currentQuoteId: string | null; // Add state for the current quote ID
+  setCurrentQuoteId: (quoteId: string | null) => void; // Add setter
   estimateTree: EstimateTreeNode[];
   setEstimateTree: React.Dispatch<React.SetStateAction<EstimateTreeNode[]>>; // Direct state setter for now
   // Calculated Totals
@@ -92,20 +95,35 @@ interface EstimateBuilderProviderProps {
 
 export const EstimateBuilderProvider: React.FC<EstimateBuilderProviderProps> = ({ children }) => {
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerContextType | null>(null);
+  const [currentQuoteId, setCurrentQuoteId] = useState<string | null>(null); // Add state for quote ID
   const [estimateTree, setEstimateTree] = useState<EstimateTreeNode[]>([]);
+
+  // --- Helper for Deep Cloning Tree ---
+  const deepCloneTree = (nodes: EstimateTreeNode[]): EstimateTreeNode[] => {
+    return nodes.map(node => {
+      if (node.type === 'group') {
+        // Recursively clone children for group nodes
+        return { ...node, children: deepCloneTree(node.children) };
+      } else {
+        // Clone item nodes (shallow copy is usually sufficient for item properties)
+        return { ...node };
+      }
+    });
+  };
 
   // --- Calculation Logic ---
 
   // Helper to calculate totals for a single item node
   const calculateItemNodeTotals = (itemNode: QuoteItemNode) => {
     const qty = itemNode.quantity ?? 0;
-    const costMaterial = itemNode.cost_material ?? 0;
-    const costLabour = itemNode.cost_labour ?? 0;
-    const costEquipment = itemNode.cost_equipment ?? 0;
-    const costOther = itemNode.cost_other ?? 0;
-    const costSubcontract = itemNode.cost_subcontract ?? 0;
+    // Use snake_case consistently to match the data structure after merge
+    const material_cost = itemNode.material_cost ?? 0;
+    const labor_cost = itemNode.labor_cost ?? 0;
+    const equipment_cost = itemNode.equipment_cost ?? 0;
+    const other_cost = itemNode.other_cost ?? 0;
+    const subcontract_cost = itemNode.subcontract_cost ?? 0;
 
-    const totalCostPerUnit = costMaterial + costLabour + costEquipment + costOther + costSubcontract;
+    const totalCostPerUnit = material_cost + labor_cost + equipment_cost + other_cost + subcontract_cost;
     const costTotal = qty * totalCostPerUnit;
 
     // Markups are omitted for now. Total is just the cost.
@@ -164,15 +182,19 @@ export const EstimateBuilderProvider: React.FC<EstimateBuilderProviderProps> = (
       taxAmount: currentTaxAmount,
       finalTotal: currentFinalTotal,
     };
-  }, [estimateTree]); // This memo recalculates only when estimateTree reference changes
+  }, [estimateTree, calculateItemNodeTotals]); // Add calculateItemNodeTotals to dependencies
 
   // Effect to update the state based on memoized calculations
   useEffect(() => {
+    console.log('>>> Updating total states based on calculatedTotals:', calculatedTotals); // Add log
+    
+    // Use a single batch update for all state variables to ensure UI updates consistently
     setSubtotal(calculatedTotals.subtotal);
     setDiscountAmount(calculatedTotals.discountAmount);
     setTotalWithDiscount(calculatedTotals.totalWithDiscount);
     setTaxAmount(calculatedTotals.taxAmount);
     setFinalTotal(calculatedTotals.finalTotal);
+    
   }, [calculatedTotals]); // This effect runs only when calculatedTotals object changes
 
 
@@ -264,46 +286,319 @@ export const EstimateBuilderProvider: React.FC<EstimateBuilderProviderProps> = (
   // --- End Tree Building Logic ---
 
 
-  // --- Placeholder Tree Manipulation Functions (Wrapped in useCallback) ---
+  // --- Tree Manipulation Functions (Wrapped in useCallback) ---
   const addNode = useCallback((node: EstimateTreeNode, parentGroupId: string | null) => {
-    console.log('addNode called (not implemented)', { node, parentGroupId });
-    // TODO: Implement logic to add node to the tree structure
-    // - Find parent node (if parentGroupId is not null)
-    // - Add node to parent's children array
-    // - Update order_index of siblings if necessary
-    // - Update estimateTree state using setEstimateTree(prevTree => ...)
-  }, []);
+    setEstimateTree(prevTree => {
+      // Use the new deep clone helper
+      const newTree = deepCloneTree(prevTree);
 
-  const updateNode = useCallback((node: EstimateTreeNode) => {
-    console.log('updateNode called (not implemented)', { node });
-    // TODO: Implement logic to update an existing node in the tree
-    // - Find the node by its ID and type
-    // - Update its properties
-    // - Update estimateTree state using setEstimateTree(prevTree => ...)
-  }, []);
+      // Function to find a group node recursively
+      const findGroup = (nodes: EstimateTreeNode[], groupId: string): QuoteGroupNode | null => {
+        for (const n of nodes) {
+          if (n.type === 'group') {
+            if (n.quote_group_id === groupId) {
+              return n;
+            }
+            const foundInChildren = findGroup(n.children, groupId);
+            if (foundInChildren) {
+              return foundInChildren;
+            }
+          }
+        }
+        return null;
+      };
+
+      // Determine the target children array and calculate the next order_index
+      let targetChildren: EstimateTreeNode[];
+      let nextOrderIndex: number;
+
+      if (parentGroupId) {
+        const parentNode = findGroup(newTree, parentGroupId);
+        if (parentNode) {
+          targetChildren = parentNode.children;
+        } else {
+          console.error(`Parent group ${parentGroupId} not found for adding node.`);
+          // Fallback: Add to root? Or throw error? Let's add to root for now.
+          targetChildren = newTree;
+        }
+      } else {
+        // Adding to the root level
+        targetChildren = newTree;
+      }
+
+      // Calculate the next order_index (max existing index + 1, or 0 if empty)
+      nextOrderIndex = targetChildren.length > 0
+        ? Math.max(...targetChildren.map(child => child.order_index ?? -1)) + 1
+        : 0;
+
+      // Assign the calculated order_index and ensure IDs exist
+      let nodeToAdd: EstimateTreeNode;
+      if (node.type === 'item') {
+          // Create a QuoteItemNode, preserving potential null/undefined quote_group_id
+          nodeToAdd = {
+              ...node,
+              order_index: nextOrderIndex,
+              quote_item_id: node.quote_item_id || `temp-item-${Date.now()}`, // Placeholder ID generation
+              // Ensure default values for fields used in rendering before calculation
+              title: node.title ?? '',
+              description: node.description ?? '',
+              quantity: node.quantity ?? 1,
+              unit: node.unit ?? '',
+              material_cost: node.material_cost ?? 0,
+              labor_cost: node.labor_cost ?? 0,
+              equipment_cost: node.equipment_cost ?? 0,
+              other_cost: node.other_cost ?? 0,
+              subcontract_cost: node.subcontract_cost ?? 0,
+          };
+          // Calculate and add cost fields before adding to tree
+          const itemTotals = calculateItemNodeTotals(nodeToAdd);
+          // Add defensive fallbacks during assignment
+          nodeToAdd.calculated_total_cost_per_unit = itemTotals.totalCostPerUnit ?? 0;
+          nodeToAdd.calculated_total_with_markup = itemTotals.totalWithMarkup ?? 0;
+
+      } else { // node.type === 'group'
+          // Create a QuoteGroupNode, ensuring quote_group_id is a string
+          nodeToAdd = {
+              ...node,
+              order_index: nextOrderIndex,
+              quote_group_id: node.quote_group_id || `temp-group-${Date.now()}`, // Placeholder ID generation
+          };
+      }
+
+      // Add the correctly typed node to the target children array
+      targetChildren.push(nodeToAdd);
+
+      // Sort the target children array again after adding
+       targetChildren.sort((a, b) => (a.order_index ?? Infinity) - (b.order_index ?? Infinity));
+
+
+      console.log('addNode implemented: Added node', nodeToAdd, 'to parent', parentGroupId);
+      return newTree; // Return the modified tree
+    });
+  }, [calculateItemNodeTotals]); // Add calculateItemNodeTotals to dependencies
+
+  const updateNode = useCallback((updatedNode: EstimateTreeNode) => {
+    setEstimateTree(prevTree => {
+      // Use the new deep clone helper
+      const newTree = deepCloneTree(prevTree);
+
+      // Recursive function to find and update the node
+      const findAndUpdate = (nodes: EstimateTreeNode[]): boolean => {
+        for (let i = 0; i < nodes.length; i++) {
+          const currentNode = nodes[i];
+
+          // Check if the current node matches the ID and type
+          if (currentNode.type === updatedNode.type) {
+            if (currentNode.type === 'item' && updatedNode.type === 'item' && currentNode.quote_item_id === updatedNode.quote_item_id) {
+              // Recalculate costs when updating an item node based on incoming data
+              const itemTotals = calculateItemNodeTotals(updatedNode);
+              // Update the node in the tree: Start with current node, overwrite with updated fields, add calculated fields
+              nodes[i] = {
+                ...currentNode, // Start with the existing node in the tree
+                ...updatedNode, // Overwrite with fields from the updated data (title, desc, costs, etc.)
+                order_index: updatedNode.order_index ?? currentNode.order_index, // Ensure order_index is handled
+                calculated_total_cost_per_unit: itemTotals.totalCostPerUnit, // Add calculated value
+                calculated_total_with_markup: itemTotals.totalWithMarkup, // Add calculated value
+              };
+              return true; // Node found and updated
+            }
+            if (currentNode.type === 'group' && updatedNode.type === 'group' && currentNode.quote_group_id === updatedNode.quote_group_id) {
+              // Preserve children when updating a group, only update other properties
+              // Ensure order_index isn't accidentally overwritten
+              nodes[i] = {
+                  ...updatedNode,
+                  children: currentNode.children, // Keep existing children
+                  order_index: updatedNode.order_index ?? currentNode.order_index
+              };
+              return true; // Node found and updated
+            }
+          }
+
+          // If it's a group, search its children recursively
+          if (currentNode.type === 'group') {
+            if (findAndUpdate(currentNode.children)) {
+              return true; // Node found and updated in children
+            }
+          }
+        }
+        return false; // Node not found in this branch
+      };
+
+      if (findAndUpdate(newTree)) {
+        console.log('updateNode implemented: Updated node', updatedNode);
+      } else {
+        console.warn('updateNode: Node not found for update', updatedNode);
+      }
+
+      // Note: Re-sorting the entire tree after every update might be unnecessary and potentially
+      // disruptive if only non-order_index properties changed.
+      // We might only need to re-sort if order_index itself was part of the update.
+      // For simplicity now, we are not re-sorting here. Sorting happens in addNode and buildTree.
+
+      return newTree; // Return the potentially modified tree
+    });
+  }, [calculateItemNodeTotals]); // Add calculateItemNodeTotals to dependencies
 
   const moveNode = useCallback((nodeId: string, nodeType: 'item' | 'group', newParentGroupId: string | null, newOrderIndex: number) => {
-    console.log('moveNode called (not implemented)', { nodeId, nodeType, newParentGroupId, newOrderIndex });
-    // TODO: Implement logic to move a node within the tree
-    // - Find the node
-    // - Remove it from its current parent's children
-    // - Update order_index of old siblings
-    // - Find the new parent node
-    // - Add the node to the new parent's children at the correct order_index
-    // - Update order_index of new siblings
-    // - Update the node's parent_group_id if it's a group, or quote_group_id if it's an item
-    // - Update estimateTree state using setEstimateTree(prevTree => ...)
-  }, []);
+    setEstimateTree(prevTree => {
+      // Use the new deep clone helper
+      const newTree = deepCloneTree(prevTree);
+      let nodeToMove: EstimateTreeNode | null = null;
+      let oldParentChildren: EstimateTreeNode[] | null = null;
+      let oldIndex = -1;
+
+      // Helper to find a node and its parent's children array + index
+      const findNodeAndParent = (
+        nodes: EstimateTreeNode[],
+        targetId: string,
+        targetType: 'item' | 'group',
+        currentParentChildren: EstimateTreeNode[] | null = null
+      ): { node: EstimateTreeNode; parentChildren: EstimateTreeNode[]; index: number } | null => {
+        for (let i = 0; i < nodes.length; i++) {
+          const node = nodes[i];
+          // Add explicit type checks before accessing type-specific IDs
+          if (node.type === targetType) {
+            let idMatch = false;
+            if (targetType === 'item' && node.type === 'item') {
+              idMatch = node.quote_item_id === targetId;
+            } else if (targetType === 'group' && node.type === 'group') {
+              idMatch = node.quote_group_id === targetId;
+            }
+            // const idMatch = targetType === 'item' ? node.quote_item_id === targetId : node.quote_group_id === targetId; // Original line causing error
+            if (idMatch) {
+              return { node, parentChildren: currentParentChildren ?? newTree, index: i };
+            }
+          }
+          if (node.type === 'group') {
+            const found = findNodeAndParent(node.children, targetId, targetType, node.children);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+
+      // Helper to find a parent group's children array by ID
+      const findParentChildrenArray = (nodes: EstimateTreeNode[], groupId: string | null): EstimateTreeNode[] | null => {
+        if (groupId === null) return newTree; // Target is root
+        for (const node of nodes) {
+          if (node.type === 'group') {
+            if (node.quote_group_id === groupId) {
+              return node.children;
+            }
+            const foundInChildren = findParentChildrenArray(node.children, groupId);
+            if (foundInChildren) return foundInChildren;
+          }
+        }
+        return null;
+      };
+
+      // 1. Find the node to move and its original parent context
+      const found = findNodeAndParent(newTree, nodeId, nodeType);
+      if (!found) {
+        console.error(`moveNode: Node not found - ID: ${nodeId}, Type: ${nodeType}`);
+        return prevTree; // Return original tree if node not found
+      }
+      nodeToMove = found.node;
+      oldParentChildren = found.parentChildren;
+      oldIndex = found.index;
+
+      // 2. Remove node from its old position
+      oldParentChildren.splice(oldIndex, 1);
+
+      // 3. Update order_index for old siblings
+      oldParentChildren.forEach((sibling, index) => {
+        sibling.order_index = index;
+      });
+
+      // 4. Find the new parent's children array
+      const newParentChildren = findParentChildrenArray(newTree, newParentGroupId);
+      if (!newParentChildren) {
+        console.error(`moveNode: New parent group not found - ID: ${newParentGroupId}`);
+        // Re-insert node at its old position to revert removal (simplistic rollback)
+        oldParentChildren.splice(oldIndex, 0, nodeToMove);
+        oldParentChildren.forEach((sibling, index) => { sibling.order_index = index; }); // Re-sort old parent
+        return prevTree; // Return original tree
+      }
+
+      // 5. Update the node's parent reference
+      if (nodeToMove.type === 'group') {
+        nodeToMove.parent_group_id = newParentGroupId;
+      } else { // type === 'item'
+        nodeToMove.quote_group_id = newParentGroupId; // Items store their direct parent group ID here
+      }
+
+      // 6. Insert node into the new position
+      // Clamp newOrderIndex to be within valid bounds
+      const clampedIndex = Math.max(0, Math.min(newOrderIndex, newParentChildren.length));
+      newParentChildren.splice(clampedIndex, 0, nodeToMove);
+
+      // 7. Update order_index for new siblings (including the moved node)
+      newParentChildren.forEach((sibling, index) => {
+        sibling.order_index = index;
+      });
+
+      console.log(`moveNode: Moved ${nodeType} ${nodeId} to parent ${newParentGroupId} at index ${clampedIndex}`);
+      return newTree; // Return the modified tree
+    });
+  }, []); // Dependency array is empty
 
     const deleteNode = useCallback((nodeId: string, nodeType: 'item' | 'group') => {
-        console.log('deleteNode called (low-level - not implemented)', { nodeId, nodeType });
-        // TODO: Implement logic to delete a node from the tree
-        // - Find the node
-        // - Remove it from its parent's children
-        // - Update order_index of siblings
-        // - Handle deletion of groups with children (recursive delete? prevent?)
-        // - Update estimateTree state using setEstimateTree(prevTree => ...)
-    }, []);
+      setEstimateTree(prevTree => {
+        // Use the new deep clone helper
+        const newTree = deepCloneTree(prevTree);
+
+        // Recursive function to find and remove the node
+        const findAndRemove = (nodes: EstimateTreeNode[]): EstimateTreeNode[] => {
+          const filteredNodes = nodes.filter(node => {
+            // Check if the current node is the one to delete
+            if (node.type === nodeType) {
+              // Add explicit type checks before accessing type-specific IDs
+              if (nodeType === 'item' && node.type === 'item' && node.quote_item_id === nodeId) {
+                return false; // Filter out the item
+              }
+              if (nodeType === 'group' && node.type === 'group' && node.quote_group_id === nodeId) {
+                // If deleting a group, also implicitly delete its children
+                return false; // Filter out the group
+              }
+            }
+            return true; // Keep the node if it doesn't match
+          });
+
+          // Recursively process children of remaining groups
+          return filteredNodes.map(node => {
+            if (node.type === 'group') {
+              // Return the group with potentially filtered children
+              return { ...node, children: findAndRemove(node.children) };
+            }
+            return node; // Return items as is
+          });
+        };
+
+        const finalTree = findAndRemove(newTree);
+
+        // Function to re-calculate order_index after deletion
+        const updateOrderIndexes = (nodes: EstimateTreeNode[]) => {
+            nodes.forEach((node, index) => {
+                node.order_index = index; // Assign index as the new order
+                if (node.type === 'group') {
+                    updateOrderIndexes(node.children); // Recurse for children
+                }
+            });
+        };
+
+        // Update order indexes for the entire tree after deletion
+        updateOrderIndexes(finalTree);
+
+
+        if (JSON.stringify(finalTree) !== JSON.stringify(prevTree)) {
+            console.log('deleteNode implemented: Removed node', { nodeId, nodeType });
+        } else {
+            console.warn('deleteNode: Node not found for deletion', { nodeId, nodeType });
+        }
+
+        return finalTree; // Return the modified tree
+      });
+    }, []); // Dependency array is empty
   // --- End Placeholder Low-Level Functions ---
 
   // --- Placeholder Higher-Level Handlers (Wrapped in useCallback) ---
@@ -324,8 +619,42 @@ export const EstimateBuilderProvider: React.FC<EstimateBuilderProviderProps> = (
 
   const handleAddGroup = useCallback((targetParentGroupId: string | null) => {
       console.log('Context: handleAddGroup triggered for parent:', targetParentGroupId);
-      // UI would prompt for group name, then call addNode with a new QuoteGroupNode.
-  }, [addNode]); // Dependency on addNode (which is stable)
+      if (!currentQuoteId) {
+          console.error("Cannot add group: currentQuoteId is null. Quote must be created first.");
+          // TODO: Handle quote creation flow if needed here or ensure it happens before.
+          // Alert.alert("Error", "Cannot add group without an active quote.");
+          return;
+      }
+
+      // Use Alert.prompt to get the group name from the user
+      Alert.prompt(
+          "New Group Name",
+          "Enter a name for the new group:",
+          (groupName: string | undefined) => { // Add type for groupName
+              const trimmedGroupName = groupName?.trim(); // Trim whitespace
+              if (!trimmedGroupName) { // Check if trimmed name is empty
+                  console.log("Group creation cancelled or empty name entered.");
+                  return; // Cancelled or empty name
+              }
+
+              const tempGroupId = `temp-group-${Date.now()}`;
+              const newGroupNode: QuoteGroupNode = {
+          type: 'group',
+          quote_group_id: tempGroupId,
+          quote_id: currentQuoteId, // Use the quote ID from context state
+          name: trimmedGroupName, // Use the validated groupName
+          order_index: 0, // addNode will calculate the correct index
+          parent_group_id: targetParentGroupId,
+                  children: [],
+              };
+
+              addNode(newGroupNode, targetParentGroupId);
+          },
+          'plain-text', // Input type
+          'New Group' // Default value
+      );
+
+  }, [addNode, currentQuoteId]); // Dependency on addNode and currentQuoteId
 
   const handleEditGroup = useCallback((groupNode: QuoteGroupNode) => {
       console.log('Context: handleEditGroup triggered for group:', groupNode.quote_group_id);
@@ -337,23 +666,40 @@ export const EstimateBuilderProvider: React.FC<EstimateBuilderProviderProps> = (
       // TODO: Implement logic to find the node, calculate its new parent/orderIndex based on direction,
       // and then call the low-level moveNode function. This requires traversing the estimateTree.
       // Example: const newTree = calculateNewTreeOrder(...); setEstimateTree(newTree);
-  }, [moveNode, estimateTree]); // Depends on moveNode (stable) and estimateTree (changes)
+  }, [moveNode]); // Depends on moveNode (stable) - REMOVED estimateTree dependency
 
    const handleDeleteNode = useCallback((nodeId: string, nodeType: 'item' | 'group') => {
       console.log('Context: handleDeleteNode triggered:', { nodeId, nodeType });
-      // UI should confirm deletion, then call the low-level deleteNode function.
-      // Consider adding confirmation logic here or ensuring UI does it.
-      // deleteNode(nodeId, nodeType); // Example call
+      // Add confirmation alert
+      Alert.alert(
+        `Delete ${nodeType === 'group' ? 'Group' : 'Item'}?`,
+        `Are you sure you want to delete this ${nodeType}? ${nodeType === 'group' ? 'All items and sub-groups within it will also be deleted.' : ''}`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel"
+          },
+          {
+            text: "Delete",
+            onPress: () => {
+              // Call the actual state update function if confirmed
+              deleteNode(nodeId, nodeType);
+            },
+            style: "destructive"
+          }
+        ]
+      );
   }, [deleteNode]); // Dependency on deleteNode (stable)
   // --- End Placeholder Higher-Level Handlers ---
 
 
-  // Memoize the context value to prevent unnecessary re-renders of consumers
-  const contextValue = useMemo(() => ({
+  // Create the context value object directly without useMemo
+  const contextValue = {
     selectedCustomer,
     setSelectedCustomer,
+    currentQuoteId, // Provide quote ID
+    setCurrentQuoteId, // Provide setter
     estimateTree,
-    // estimateTree, // Removed duplicate
     setEstimateTree, // Keep direct setter for now during refactor, remove later
     // Calculated values
     subtotal,
@@ -375,26 +721,7 @@ export const EstimateBuilderProvider: React.FC<EstimateBuilderProviderProps> = (
     handleEditGroup,
     handleMoveNode,
     handleDeleteNode,
-  // Add all values provided in the context object to the dependency array
-  }), [
-    selectedCustomer,
-    estimateTree,
-    subtotal,
-    discountAmount,
-    totalWithDiscount,
-    taxAmount,
-    finalTotal,
-    // Include stable function references if they were defined with useCallback,
-    // otherwise, including them might cause unnecessary updates if they are redefined on every render.
-    // For now, assuming setters and placeholders are stable enough or don't need to be dependencies
-    // for the memoization of the value object itself. Re-evaluate if needed.
-    buildTreeFromFlatData, // Assuming this is stable (defined outside render or via useCallback)
-    addNode, updateNode, moveNode, deleteNode, // Placeholders assumed stable
-    // Now include the stable function references in the dependency array
-    buildTreeFromFlatData,
-    addNode, updateNode, moveNode, deleteNode,
-    handleAddItem, handleEditItem, handleAddGroup, handleEditGroup, handleMoveNode, handleDeleteNode
-  ]);
+  };
 
 
   return (
